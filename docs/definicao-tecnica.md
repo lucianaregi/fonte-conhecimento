@@ -2,7 +2,7 @@
 
 Este documento é a referência atual do escopo do Fonte. Descreve o que a v1 deve entregar e separa o que já está implementado do que ainda está previsto.
 
-> **Estado atual do código**: o repositório contém a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)), o núcleo local da indexação (leitura e chunking de Markdown, em [Fonte.Api/Indexing/](../Fonte.Api/Indexing/)) e a geração de embeddings dos chunks com Gemini (em [Fonte.Api/Embeddings/](../Fonte.Api/Embeddings/)), com testes. Armazenamento no Qdrant, endpoints de indexação e perguntas, demais integrações, observabilidade e CI ainda **não estão implementados**.
+> **Estado atual do código**: o repositório contém a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)), o núcleo local da indexação (leitura e chunking de Markdown, em [Fonte.Api/Indexing/](../Fonte.Api/Indexing/)) a geração de embeddings dos chunks com Gemini (em [Fonte.Api/Embeddings/](../Fonte.Api/Embeddings/)) e o armazenamento dos chunks vetorizados no Qdrant (em [Fonte.Api/VectorStore/](../Fonte.Api/VectorStore/)), com testes. Busca vetorial, endpoints de indexação e perguntas, demais integrações, observabilidade e CI ainda **não estão implementados**.
 
 ## Contexto
 
@@ -73,7 +73,7 @@ Se os documentos não fornecerem contexto suficiente, o sistema deve informar is
 | Testes | Testes automatizados | Implementado: xUnit + `Microsoft.AspNetCore.Mvc.Testing` ([Fonte.Tests.csproj](../Fonte.Tests/Fonte.Tests.csproj)) |
 | Embeddings | Modelo de embeddings do Gemini (Gemini API) | Implementado: `gemini-embedding-2` via SDK `Google.GenAI`, exposto como `IEmbeddingGenerator` (`Microsoft.Extensions.AI`). Ainda não usado por nenhum endpoint. |
 | Geração | Modelo generativo do Gemini (Gemini API) | Previsto |
-| Busca vetorial | Qdrant Cloud | Previsto |
+| Busca vetorial | Qdrant Cloud | Armazenamento implementado com o SDK `Qdrant.Client` (`ChunkVectorStore`), ainda não usado por nenhum endpoint. Busca prevista. |
 | Observabilidade | OpenTelemetry, `ActivitySource`, `Meter`, `ILogger`, Grafana Cloud | Previsto |
 | CI | GitHub Actions | Previsto |
 
@@ -109,11 +109,6 @@ Decisões registradas em [plans/001-indexacao-markdown.md](plans/001-indexacao-m
 | Chunking | Divisão por parágrafos (blocos separados por linha em branco), agrupando parágrafos consecutivos até `MaxChunkSize` caracteres. Parágrafo maior que o limite é quebrado no último espaço antes dele; sem espaço, no próprio limite. Sem sobreposição. | `MarkdownChunker` |
 | Metadados do chunk | `DocumentPath` (caminho relativo à pasta configurada, com `/` como separador), `Index` (posição no documento, a partir de 0) e `Content`. `DocumentPath` + `Index` correspondem a `document` + `chunkId`. | `DocumentChunk` |
 
-**Em aberto**:
-
-- a estratégia de ID dos pontos no Qdrant;
-- o comportamento da reindexação (substituir tudo ou atualizar incrementalmente) não foi definido.
-
 ### Embeddings dos chunks (implementado)
 
 Decisões registradas em [plans/002-embeddings-gemini.md](plans/002-embeddings-gemini.md).
@@ -131,6 +126,26 @@ Decisões registradas em [plans/002-embeddings-gemini.md](plans/002-embeddings-g
 - tamanho do lote por requisição (a documentação da Gemini API não informa o máximo);
 - política de retry para erros 429 e 5xx;
 - formato e fluxo do embedding da pergunta.
+
+### Armazenamento no Qdrant (implementado)
+
+Decisões registradas em [plans/003-armazenamento-qdrant.md](plans/003-armazenamento-qdrant.md).
+
+| Tema | Decisão | Código |
+|---|---|---|
+| Reindexação | Completa, blue/green com alias: cada reindexação cria `{alias}-{yyyyMMddHHmmssfff}` (UTC), grava todos os chunks, aponta o alias para ela numa operação atômica e só então apaga as collections antigas e sobras de tentativas anteriores (apenas as que seguem esse padrão de nome). | `ChunkVectorStore` |
+| Collection | Tamanho do vetor igual a `Gemini:EmbeddingDimensions`, distância `Cosine` e índice keyword em `document_path`. | `ChunkVectorStore` |
+| Payload | `document_path` (keyword), `chunk_index` (inteiro) e `content`. | `ChunkPoint`, `QdrantGateway` |
+| IDs | UUID v5 (RFC 9562) derivado de `DocumentPath` + `Index`: o mesmo chunk sempre tem o mesmo ID. | `ChunkPointId` |
+| Gravação | Um upsert por documento, com `wait: true`. Sem retry e sem paralelismo. | `ChunkVectorStore` |
+| Falhas | Falha antes da troca do alias: a exceção original sobe e a indexação ativa não muda. Falha na limpeza depois da troca: `VectorStoreCleanupException`, e a nova indexação já está ativa. | `ChunkVectorStore` |
+| Integração | `IQdrantGateway` expõe só as operações usadas, com tipos do Fonte; `QdrantGateway` é o único ponto que usa o SDK. | `IQdrantGateway`, `QdrantGateway` |
+
+**Em aberto**:
+
+- limite de pontos ou bytes por upsert, se for preciso agrupar mais de um documento;
+- controle de concorrência da reindexação;
+- busca vetorial pelo alias.
 
 ## Fluxo de pergunta
 
@@ -231,7 +246,15 @@ O Gemini fica na seção `Gemini` (`GeminiOptions`), validada na inicialização
 | `Gemini:EmbeddingModel` | `gemini-embedding-2` | Obrigatória. |
 | `Gemini:EmbeddingDimensions` | `768` | De 128 a 3072. |
 
-**Em aberto**: a configuração dos segredos do Qdrant e do Grafana/OpenTelemetry.
+O Qdrant fica na seção `Qdrant` (`QdrantOptions`), validada na inicialização, exceto os segredos:
+
+| Chave | Padrão | Regra |
+|---|---|---|
+| `Qdrant:CollectionName` | `fonte-chunks` | Obrigatória. Nome do alias da collection ativa. |
+| `Qdrant:Url` | — | Segredo. Endereço gRPC do cluster (porta 6334), via user-secrets em desenvolvimento ou `Qdrant__Url` nos demais ambientes. Exigido apenas ao usar o Qdrant. |
+| `Qdrant:ApiKey` | — | Segredo, via user-secrets em desenvolvimento ou `Qdrant__ApiKey` nos demais ambientes. Exigida apenas ao usar o Qdrant. |
+
+**Em aberto**: a configuração dos segredos do Grafana/OpenTelemetry.
 
 ## Definição de pronto da v1
 
