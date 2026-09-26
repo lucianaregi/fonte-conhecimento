@@ -2,7 +2,7 @@
 
 Este documento é a referência atual do escopo do Fonte. Descreve o que a v1 deve entregar e separa o que já está implementado do que ainda está previsto.
 
-> **Estado atual do código**: o repositório contém a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)), o núcleo local da indexação (leitura e chunking de Markdown, em [Fonte.Api/Indexing/](../Fonte.Api/Indexing/)) a geração de embeddings dos chunks com Gemini (em [Fonte.Api/Embeddings/](../Fonte.Api/Embeddings/)) e o armazenamento dos chunks vetorizados no Qdrant (em [Fonte.Api/VectorStore/](../Fonte.Api/VectorStore/)), com testes. Busca vetorial, endpoints de indexação e perguntas, demais integrações, observabilidade e CI ainda **não estão implementados**.
+> **Estado atual do código**: o repositório contém a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)), o núcleo local da indexação (leitura e chunking de Markdown, em [Fonte.Api/Indexing/](../Fonte.Api/Indexing/)), a geração de embeddings dos chunks com Gemini (em [Fonte.Api/Embeddings/](../Fonte.Api/Embeddings/)), o armazenamento dos chunks vetorizados no Qdrant (em [Fonte.Api/VectorStore/](../Fonte.Api/VectorStore/)), o fluxo completo de indexação com `POST /documents/index` e a fundação de observabilidade (em [Fonte.Api/Observability/](../Fonte.Api/Observability/)), com testes. Busca vetorial, `POST /questions`, conexão efetiva com o Grafana Cloud e CI ainda **não estão implementados**.
 
 ## Contexto
 
@@ -74,7 +74,7 @@ Se os documentos não fornecerem contexto suficiente, o sistema deve informar is
 | Embeddings | Modelo de embeddings do Gemini (Gemini API) | Implementado: `gemini-embedding-2` via SDK `Google.GenAI`, exposto como `IEmbeddingGenerator` (`Microsoft.Extensions.AI`). Ainda não usado por nenhum endpoint. |
 | Geração | Modelo generativo do Gemini (Gemini API) | Previsto |
 | Busca vetorial | Qdrant Cloud | Armazenamento implementado com o SDK `Qdrant.Client` (`ChunkVectorStore`), ainda não usado por nenhum endpoint. Busca prevista. |
-| Observabilidade | OpenTelemetry, `ActivitySource`, `Meter`, `ILogger`, Grafana Cloud | Previsto |
+| Observabilidade | OpenTelemetry, `ActivitySource`, `Meter`, `ILogger`, Grafana Cloud | Implementado para a indexação: traces, métricas e logs com OpenTelemetry e exportação OTLP opcional. A conexão com o Grafana Cloud depende das credenciais da conta. |
 | CI | GitHub Actions | Previsto |
 
 O modelo generativo do Gemini ainda não foi escolhido.
@@ -144,7 +144,7 @@ Decisões registradas em [plans/003-armazenamento-qdrant.md](plans/003-armazenam
 **Em aberto**:
 
 - limite de pontos ou bytes por upsert, se for preciso agrupar mais de um documento;
-- controle de concorrência da reindexação;
+- controle de concorrência entre instâncias (dentro de uma instância, resolvido pelo `DocumentIndexer`);
 - busca vetorial pelo alias.
 
 ## Fluxo de pergunta
@@ -172,10 +172,47 @@ A v1 tem três endpoints.
 | Método e rota | Função | Situação |
 |---|---|---|
 | `GET /health` | Health check | Implementado: retorna `200 OK` sem corpo |
-| `POST /documents/index` | Indexa ou reindexa os documentos da pasta configurada | Previsto |
+| `POST /documents/index` | Indexa ou reindexa os documentos da pasta configurada | Implementado (ver abaixo) |
 | `POST /questions` | Recebe uma pergunta e retorna resposta + fontes | Previsto |
 
+### `POST /documents/index`
+
+Decisões registradas em [plans/004-indexacao-endpoint-observabilidade.md](plans/004-indexacao-endpoint-observabilidade.md). Orquestrado por `DocumentIndexer`: resolve Gemini e Qdrant, lê, divide em chunks, gera embeddings e publica no Qdrant (reindexação blue/green). Sem corpo na requisição.
+
+| Status | Quando | Corpo |
+|---|---|---|
+| `200 OK` | Nova indexação publicada | `{ "documents": 3, "chunks": 42, "cleanupCompleted": true }` |
+| `200 OK` | Publicada, mas a limpeza das collections antigas falhou | Igual, com `"cleanupCompleted": false`; as sobras são removidas na próxima indexação |
+| `409 Conflict` | Já existe uma indexação em andamento nesta instância | `ProblemDetails` |
+| `422 Unprocessable Entity` | Nenhum documento Markdown na pasta configurada | `ProblemDetails`; índice ativo não alterado |
+| `500` | Falha de configuração (chave ou URL ausente), de leitura, do Gemini ou do Qdrant | Resposta padrão do ASP.NET; índice ativo não alterado |
+
+- **Concorrência**: uma indexação por vez em cada instância da aplicação (`SemaphoreSlim`); a segunda requisição simultânea recebe 409 sem esperar. Não há coordenação entre instâncias.
+- **Configuração ausente**: Gemini e Qdrant são resolvidos dentro da indexação, antes de ler documentos ou chamar serviços externos. A API e `/health` sobem sem credenciais; a falha é registrada como falha da indexação (log e métrica) e pode ser tentada de novo.
+- **Cancelamento**: a desconexão do cliente cancela a indexação. Antes da troca do alias, o índice ativo não muda; a collection incompleta é limpa na próxima indexação.
+
 ## Observabilidade
+
+### Indexação (implementado)
+
+Instrumentação própria no `DocumentIndexer`, com `ActivitySource` e `Meter` chamados `Fonte.Api` (`FonteTelemetry`, `IndexingMetrics`):
+
+```text
+POST /documents/index           ← ASP.NET Core (automático)
+├── documents.read              ← fonte.documents.count
+├── documents.chunk             ← fonte.chunks.count
+├── embedding.create
+│   └── HTTP → Gemini           ← System.Net.Http (automático)
+└── vectorstore.replace         ← fonte.cleanup.completed
+    └── HTTP/gRPC → Qdrant      ← System.Net.Http (automático)
+```
+
+- **Traces**: em falha, o span da etapa recebe status `Error` e `error.type` (tipo da exceção), sem mensagem nem stack trace. `/health` não gera trace.
+- **Métricas**: `fonte.indexing.duration` (histograma, segundos, com `fonte.indexing.outcome` = `published`, `published_cleanup_failed`, `failed`, `already_running` ou `no_documents`, e `error.type` em falhas); `fonte.indexing.documents` e `fonte.indexing.chunks` (contadores das indexações publicadas). Também são coletadas as métricas automáticas do ASP.NET Core e de `System.Net.Http`.
+- **Logs**: estruturados com `ILogger` (`LoggerMessage`): início, conclusão (documentos, chunks, duração), rejeições, falha de limpeza (aviso) e falha (erro, com `Stage` = `configuration`, `read`, `chunk`, `embedding` ou `vectorstore`).
+- **Privacidade**: conteúdo de documentos e chunks, embeddings e chaves nunca entram na telemetria. `DocumentPath` fica fora de traces e métricas; pode aparecer em logs de erro, pela mensagem da exceção, para identificar o documento que falhou.
+
+### Perguntas (previsto)
 
 Uma requisição de pergunta deve poder ser acompanhada aproximadamente assim:
 
@@ -254,7 +291,17 @@ O Qdrant fica na seção `Qdrant` (`QdrantOptions`), validada na inicialização
 | `Qdrant:Url` | — | Segredo. Endereço gRPC do cluster (porta 6334), via user-secrets em desenvolvimento ou `Qdrant__Url` nos demais ambientes. Exigido apenas ao usar o Qdrant. |
 | `Qdrant:ApiKey` | — | Segredo, via user-secrets em desenvolvimento ou `Qdrant__ApiKey` nos demais ambientes. Exigida apenas ao usar o Qdrant. |
 
-**Em aberto**: a configuração dos segredos do Grafana/OpenTelemetry.
+A telemetria é exportada por OTLP somente quando `OTEL_EXPORTER_OTLP_ENDPOINT` está configurado; sem ele, nada é enviado. As variáveis seguem o padrão do OpenTelemetry e nenhuma entra no repositório:
+
+| Variável | Uso |
+|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Endpoint base. No Grafana Cloud: `https://otlp-gateway-<região>.grafana.net/otlp` |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` para o Grafana Cloud (o padrão do SDK é `grpc`) |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Cabeçalho de autenticação gerado no portal do Grafana Cloud (segredo) |
+
+Os valores do Grafana Cloud são gerados no portal (stack → OpenTelemetry → Configure). O serviço é identificado como `fonte`.
+
+**Em aberto**: confirmar, na primeira conexão real, se as variáveis `OTEL_*` são lidas também de user-secrets e se `OTEL_SERVICE_NAME` sobrepõe o nome `fonte`.
 
 ## Definição de pronto da v1
 

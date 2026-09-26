@@ -1,5 +1,6 @@
 using Fonte.Api.Embeddings;
 using Fonte.Api.Indexing;
+using Fonte.Api.Observability;
 using Fonte.Api.VectorStore;
 using Google.GenAI;
 using Microsoft.Extensions.AI;
@@ -7,6 +8,8 @@ using Microsoft.Extensions.Options;
 using Qdrant.Client;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.AddFonteOpenTelemetry();
 
 builder.Services.AddOptions<DocumentsOptions>()
     .Bind(builder.Configuration.GetSection(DocumentsOptions.SectionName))
@@ -65,9 +68,17 @@ builder.Services.AddSingleton<IQdrantGateway, QdrantGateway>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ChunkVectorStore>();
 
+// Gemini e Qdrant são resolvidos dentro da indexação, não na inicialização: a API sobe sem
+// credenciais e uma falha de configuração é registrada como falha da própria indexação.
+builder.Services.AddSingleton<Func<ChunkEmbedder>>(services => services.GetRequiredService<ChunkEmbedder>);
+builder.Services.AddSingleton<Func<ChunkVectorStore>>(services => services.GetRequiredService<ChunkVectorStore>);
+builder.Services.AddSingleton<IndexingMetrics>();
+builder.Services.AddSingleton<DocumentIndexer>();
+
 var app = builder.Build();
 
 app.MapGet("/health", () => Results.Ok());
+app.MapDocumentIndexing();
 
 app.Run();
 

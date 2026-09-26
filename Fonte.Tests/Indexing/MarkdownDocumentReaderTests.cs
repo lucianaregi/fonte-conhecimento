@@ -1,6 +1,5 @@
 using Fonte.Api.Indexing;
-using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Hosting;
+using Fonte.Tests.Fakes;
 using Microsoft.Extensions.Options;
 
 namespace Fonte.Tests.Indexing;
@@ -78,13 +77,5 @@ public sealed class MarkdownDocumentReaderTests : IDisposable
         var reader = CreateReader("inexistente");
 
         await Assert.ThrowsAsync<DirectoryNotFoundException>(() => reader.ReadAllAsync());
-    }
-
-    private sealed class StubHostEnvironment(string contentRootPath) : IHostEnvironment
-    {
-        public string EnvironmentName { get; set; } = "Test";
-        public string ApplicationName { get; set; } = "Fonte.Tests";
-        public string ContentRootPath { get; set; } = contentRootPath;
-        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }

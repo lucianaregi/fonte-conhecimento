@@ -1,6 +1,6 @@
 using Fonte.Api.Embeddings;
 using Fonte.Api.Indexing;
-using Microsoft.Extensions.AI;
+using Fonte.Tests.Fakes;
 using Microsoft.Extensions.Options;
 
 namespace Fonte.Tests.Embeddings;
@@ -102,42 +102,5 @@ public class ChunkEmbedderTests
         await CreateEmbedder(generator).EmbedAsync([new DocumentChunk("a.md", 0, "um")], cancellation.Token);
 
         Assert.Equal(cancellation.Token, Assert.Single(generator.CancellationTokens));
-    }
-
-    private sealed class FakeEmbeddingGenerator(int dimensions) : IEmbeddingGenerator<string, Embedding<float>>
-    {
-        private int _generated;
-
-        public int EmbeddingsPerCall { get; init; } = 1;
-
-        public List<string[]> Calls { get; } = [];
-
-        public List<CancellationToken> CancellationTokens { get; } = [];
-
-        public static float[] VectorFor(int sequence, int dimensions) =>
-            Enumerable.Repeat((float)sequence, dimensions).ToArray();
-
-        public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
-            IEnumerable<string> values,
-            EmbeddingGenerationOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            Calls.Add(values.ToArray());
-            CancellationTokens.Add(cancellationToken);
-
-            var embeddings = new GeneratedEmbeddings<Embedding<float>>();
-            for (var i = 0; i < EmbeddingsPerCall; i++)
-            {
-                embeddings.Add(new Embedding<float>(VectorFor(_generated++, dimensions)));
-            }
-
-            return Task.FromResult(embeddings);
-        }
-
-        public object? GetService(Type serviceType, object? serviceKey = null) => null;
-
-        public void Dispose()
-        {
-        }
     }
 }
