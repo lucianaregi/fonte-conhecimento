@@ -2,7 +2,7 @@
 
 Este documento é a referência atual do escopo do Fonte. Descreve o que a v1 deve entregar e separa o que já está implementado do que ainda está previsto.
 
-> **Estado atual do código**: o repositório contém apenas a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)) e o teste desse endpoint ([Fonte.Tests/HealthEndpointTests.cs](../Fonte.Tests/HealthEndpointTests.cs)). Tudo o que está descrito abaixo como indexação, perguntas, integrações, observabilidade e CI ainda **não está implementado**.
+> **Estado atual do código**: o repositório contém a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)) e o núcleo local da indexação (leitura e chunking de Markdown, em [Fonte.Api/Indexing/](../Fonte.Api/Indexing/)), com testes. Endpoints de indexação e perguntas, integrações, observabilidade e CI ainda **não estão implementados**.
 
 ## Contexto
 
@@ -99,10 +99,19 @@ Cada chunk precisa preservar informações suficientes para identificar sua orig
 - `content`
 - `embedding`
 
+### Leitura e chunking (implementado)
+
+Decisões registradas em [plans/001-indexacao-markdown.md](plans/001-indexacao-markdown.md).
+
+| Tema | Decisão | Código |
+|---|---|---|
+| Leitura | Arquivos `*.md` da pasta configurada e de todos os subdiretórios, em UTF-8, ordenados pelo caminho relativo. Pasta inexistente gera `DirectoryNotFoundException`. | `MarkdownDocumentReader` |
+| Chunking | Divisão por parágrafos (blocos separados por linha em branco), agrupando parágrafos consecutivos até `MaxChunkSize` caracteres. Parágrafo maior que o limite é quebrado no último espaço antes dele; sem espaço, no próprio limite. Sem sobreposição. | `MarkdownChunker` |
+| Metadados do chunk | `DocumentPath` (caminho relativo à pasta configurada, com `/` como separador), `Index` (posição no documento, a partir de 0) e `Content`. `DocumentPath` + `Index` correspondem a `document` + `chunkId`. | `DocumentChunk` |
+
 **Em aberto**:
 
-- o desenho exato dos metadados será definido durante a modelagem;
-- a estratégia de chunking (tamanho, sobreposição, critério de divisão) não foi definida;
+- a associação do embedding ao chunk e a estratégia de ID dos pontos no Qdrant;
 - o comportamento da reindexação (substituir tudo ou atualizar incrementalmente) não foi definido.
 
 ## Fluxo de pergunta
@@ -189,7 +198,14 @@ Segredos e configurações externas não entram no Git:
 
 O repositório pode fornecer exemplos de configuração sem valores sensíveis. O `.gitignore` já exclui arquivos `.env`.
 
-**Em aberto**: o mecanismo de configuração local (por exemplo, user secrets ou variáveis de ambiente) e a configuração da pasta de documentos ainda não foram definidos.
+A pasta de documentos e o tamanho dos chunks ficam na seção `Documents` do [appsettings.json](../Fonte.Api/appsettings.json) (`DocumentsOptions`), validada na inicialização:
+
+| Chave | Padrão | Regra |
+|---|---|---|
+| `Documents:Path` | `documents` | Obrigatória. Caminho relativo é resolvido a partir do ContentRoot da API. |
+| `Documents:MaxChunkSize` | `1000` | Maior que 0. Heurística inicial. |
+
+**Em aberto**: o mecanismo de configuração local dos segredos (por exemplo, user secrets ou variáveis de ambiente).
 
 ## Definição de pronto da v1
 
