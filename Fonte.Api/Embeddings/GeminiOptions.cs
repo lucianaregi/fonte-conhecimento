@@ -7,8 +7,9 @@ public sealed class GeminiOptions
     public const string SectionName = "Gemini";
 
     /// <summary>
-    /// Chave da Gemini API. Vem de user-secrets em desenvolvimento ou de <c>Gemini__ApiKey</c>
-    /// nos demais ambientes. Não é validada na inicialização: só é exigida ao criar o cliente.
+    /// Chave da Gemini API. Vem do <c>appsettings.Development.json</c> local (não versionado) em
+    /// desenvolvimento ou de <c>Gemini__ApiKey</c> nos demais ambientes. Não é validada na
+    /// inicialização: só é exigida ao criar o cliente.
     /// </summary>
     public string? ApiKey { get; set; }
 

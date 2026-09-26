@@ -4,8 +4,12 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>588a693e-35fa-4aa3-b42e-dfb3a6f8979f</UserSecretsId>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Arquivo local com segredos de desenvolvimento: nunca vai para a saída do publish. -->
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Google.GenAI" Version="1.22.0" />

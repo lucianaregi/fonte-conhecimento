@@ -2,6 +2,8 @@
 
 **Status**: implementado e aprovado.
 
+**Atualização**: em desenvolvimento, os segredos passaram a vir de `appsettings.Development.json` local e não versionado, no lugar de user-secrets (ver [definição técnica](../definicao-tecnica.md)).
+
 ## Objetivo
 
 Persistir os `EmbeddedChunk` no Qdrant Cloud com reindexação completa blue/green, deixando a collection ativa acessível pelo alias. Sem leitura, sem busca e sem endpoints.

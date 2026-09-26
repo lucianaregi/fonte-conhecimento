@@ -63,3 +63,6 @@ coverage.*
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Configuração local com segredos (usar appsettings.Development.example.json como modelo)
+appsettings.Development.json

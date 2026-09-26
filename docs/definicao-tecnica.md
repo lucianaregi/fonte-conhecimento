@@ -268,6 +268,10 @@ Segredos e configurações externas não entram no Git:
 
 O repositório pode fornecer exemplos de configuração sem valores sensíveis. O `.gitignore` já exclui arquivos `.env`.
 
+**Segredos em desenvolvimento**: ficam no `Fonte.Api/appsettings.Development.json` local, ignorado pelo Git e excluído do `dotnet publish`. Para criá-lo, copie [appsettings.Development.example.json](../Fonte.Api/appsettings.Development.example.json), que é versionado e mostra só a estrutura, e preencha os valores. Nos demais ambientes, use variáveis de ambiente (ex.: `Gemini__ApiKey`). Vale a precedência padrão do ASP.NET Core: `appsettings.json` → `appsettings.{Ambiente}.json` → variáveis de ambiente → linha de comando, então variáveis de ambiente sobrescrevem os arquivos.
+
+**Risco conhecido**: os testes de integração (`WebApplicationFactory`) rodam no ambiente `Development` e carregam o `appsettings.Development.json` local. Os testes atuais que envolvem Gemini ou Qdrant zeram chave e URL ou injetam fakes; o isolamento completo será tratado antes de ampliar testes de integração que possam alcançar serviços externos.
+
 A pasta de documentos e o tamanho dos chunks ficam na seção `Documents` do [appsettings.json](../Fonte.Api/appsettings.json) (`DocumentsOptions`), validada na inicialização:
 
 | Chave | Padrão | Regra |
@@ -279,7 +283,7 @@ O Gemini fica na seção `Gemini` (`GeminiOptions`), validada na inicialização
 
 | Chave | Padrão | Regra |
 |---|---|---|
-| `Gemini:ApiKey` | — | Segredo. Em desenvolvimento, via .NET user-secrets (`dotnet user-secrets set Gemini:ApiKey <chave> --project Fonte.Api`); nos demais ambientes, via variável `Gemini__ApiKey`. Exigida apenas ao gerar embeddings. As variáveis `GEMINI_API_KEY` e `GOOGLE_API_KEY` não são usadas. |
+| `Gemini:ApiKey` | — | Segredo. Em desenvolvimento, no `appsettings.Development.json` local; nos demais ambientes, via variável `Gemini__ApiKey`. Exigida apenas ao gerar embeddings. As variáveis `GEMINI_API_KEY` e `GOOGLE_API_KEY` não são usadas. |
 | `Gemini:EmbeddingModel` | `gemini-embedding-2` | Obrigatória. |
 | `Gemini:EmbeddingDimensions` | `768` | De 128 a 3072. |
 
@@ -288,8 +292,8 @@ O Qdrant fica na seção `Qdrant` (`QdrantOptions`), validada na inicialização
 | Chave | Padrão | Regra |
 |---|---|---|
 | `Qdrant:CollectionName` | `fonte-chunks` | Obrigatória. Nome do alias da collection ativa. |
-| `Qdrant:Url` | — | Segredo. Endereço gRPC do cluster (porta 6334), via user-secrets em desenvolvimento ou `Qdrant__Url` nos demais ambientes. Exigido apenas ao usar o Qdrant. |
-| `Qdrant:ApiKey` | — | Segredo, via user-secrets em desenvolvimento ou `Qdrant__ApiKey` nos demais ambientes. Exigida apenas ao usar o Qdrant. |
+| `Qdrant:Url` | — | Segredo. Endereço gRPC do cluster (porta 6334), no `appsettings.Development.json` local em desenvolvimento ou via `Qdrant__Url` nos demais ambientes. Exigido apenas ao usar o Qdrant. |
+| `Qdrant:ApiKey` | — | Segredo, no `appsettings.Development.json` local em desenvolvimento ou via `Qdrant__ApiKey` nos demais ambientes. Exigida apenas ao usar o Qdrant. |
 
 A telemetria é exportada por OTLP somente quando `OTEL_EXPORTER_OTLP_ENDPOINT` está configurado; sem ele, nada é enviado. As variáveis seguem o padrão do OpenTelemetry e nenhuma entra no repositório:
 
@@ -301,7 +305,9 @@ A telemetria é exportada por OTLP somente quando `OTEL_EXPORTER_OTLP_ENDPOINT` 
 
 Os valores do Grafana Cloud são gerados no portal (stack → OpenTelemetry → Configure). O serviço é identificado como `fonte`.
 
-**Em aberto**: confirmar, na primeira conexão real, se as variáveis `OTEL_*` são lidas também de user-secrets e se `OTEL_SERVICE_NAME` sobrepõe o nome `fonte`.
+As variáveis `OTEL_EXPORTER_OTLP_*` são lidas pelo `IConfiguration` da aplicação (verificado no código-fonte do exportador OTLP), portanto seguem a mesma precedência das demais configurações.
+
+**Em aberto**: confirmar, na primeira conexão real, se `OTEL_SERVICE_NAME` sobrepõe o nome `fonte`.
 
 ## Definição de pronto da v1
 

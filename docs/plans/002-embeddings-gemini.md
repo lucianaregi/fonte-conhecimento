@@ -2,6 +2,8 @@
 
 **Status**: implementado e aprovado.
 
+**Atualização**: em desenvolvimento, os segredos passaram a vir de `appsettings.Development.json` local e não versionado, no lugar de user-secrets (ver [definição técnica](../definicao-tecnica.md)).
+
 ## Objetivo
 
 Gerar um vetor para cada `DocumentChunk` usando a Gemini API, sem armazenamento e sem novos endpoints.

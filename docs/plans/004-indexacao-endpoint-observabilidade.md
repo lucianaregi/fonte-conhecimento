@@ -2,6 +2,8 @@
 
 **Status**: implementado, aguardando revisão.
 
+**Atualização**: em desenvolvimento, os segredos passaram a vir de `appsettings.Development.json` local e não versionado, no lugar de user-secrets (ver [definição técnica](../definicao-tecnica.md)).
+
 ## Objetivo
 
 Conectar `MarkdownDocumentReader` → `MarkdownChunker` → `ChunkEmbedder` → `ChunkVectorStore`, expor o fluxo por `POST /documents/index` e introduzir a fundação de observabilidade do Fonte (logs, traces e métricas com OpenTelemetry, exportação OTLP opcional).
