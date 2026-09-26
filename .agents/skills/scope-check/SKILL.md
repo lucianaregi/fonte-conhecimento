@@ -15,6 +15,7 @@ Verifica se cada alteração é necessária para cumprir o pedido. Em revisão, 
 | Testes do comportamento criado ou alterado | Sim |
 | Ajustes obrigatórios em chamadores, configuração ou documentação afetados diretamente pela mudança | Sim |
 | Correção de bug sem a qual a tarefa não funciona | Sim |
+| Arquivo do plano da tarefa (task-planning), cujo caminho foi apresentado e aprovado junto com o plano | Sim |
 | Bug encontrado por acaso, sem relação com a tarefa | Não: relatar |
 | Refatoração, renomeação ou reorganização de código que já funciona | Não: sugerir separadamente |
 | Formatação, ordem de imports ou estilo em trechos que a tarefa não tocou | Não |
