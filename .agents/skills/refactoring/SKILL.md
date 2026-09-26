@@ -13,6 +13,7 @@ Altera código. O comportamento externo deve ficar idêntico: saídas, efeitos c
 - Não alterar contratos públicos (APIs, assinaturas exportadas, schemas, formatos serializados) sem pedido explícito.
 - Bug encontrado durante a refatoração é relatado, não corrigido: corrigir mudaria o comportamento.
 - Não misturar refatoração com funcionalidade nova.
+- Não incluir, por iniciativa própria, atribuição, assinatura, crédito ou identificação do agente, nem indicação de que o conteúdo foi gerado por IA. Só incluir se o usuário pedir ou uma regra explícita do projeto exigir.
 
 ## Procedimento
 

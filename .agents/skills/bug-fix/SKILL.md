@@ -7,6 +7,8 @@ description: Investiga um bug até a causa raiz, reproduz o erro, aplica a menor
 
 Altera código e testes. Se o usuário pediu apenas diagnóstico, executar os passos 1 a 3 e relatar sem corrigir. Nesse caso, o teste de reprodução só fica no repositório se o usuário concordar.
 
+Não incluir, por iniciativa própria, atribuição, assinatura, crédito ou identificação do agente, nem indicação de que o conteúdo foi gerado por IA. Só incluir se o usuário pedir ou uma regra explícita do projeto exigir.
+
 ## Procedimento
 
 1. **Levantar evidências**: descrição, passos de reprodução, mensagens de erro, stack traces, logs e o código envolvido. Formular hipóteses e verificar o que cada uma prevê antes de escolher uma.

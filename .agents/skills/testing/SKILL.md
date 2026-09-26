@@ -13,6 +13,7 @@ Cria ou altera testes. Não altera código de produção sem pedido; se o códig
 - **Dublês só onde necessário**: substituir (mocks, stubs, fakes) o que é externo, lento ou não determinístico, como rede, serviços de terceiros, relógio e e-mail. Para lógica de domínio e objetos de valor, usar instâncias reais. Em testes de integração, seguir a prática do projeto (banco real, em contêiner ou em memória).
 - **Determinismo**: não depender da ordem de execução, do estado deixado por outro teste nem de relógio, fuso ou aleatoriedade sem controle.
 - **Asserções específicas**: verificar valores, não apenas "não é nulo" ou "não lançou exceção".
+- **Autoria**: não incluir, por iniciativa própria, atribuição, assinatura, crédito ou identificação do agente, nem indicação de que o conteúdo foi gerado por IA. Só incluir se o usuário pedir ou uma regra explícita do projeto exigir.
 
 ## Estrutura
 

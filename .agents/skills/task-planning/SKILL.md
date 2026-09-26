@@ -12,6 +12,7 @@ Planeja; não altera código. O único arquivo que pode criar ou atualizar é o 
 - Inspecionar o código antes de listar arquivos. Não inventar caminhos nem componentes; marcar com "(novo)" os arquivos a criar.
 - Planejar apenas o que foi pedido. Melhorias percebidas vão como observação separada.
 - Tamanho proporcional à tarefa: tarefa pequena, plano de poucas linhas.
+- Não incluir, por iniciativa própria, atribuição, assinatura, crédito ou identificação do agente, nem indicação de que o conteúdo foi gerado por IA. Só incluir se o usuário pedir ou uma regra explícita do projeto exigir.
 
 ## Formato
 

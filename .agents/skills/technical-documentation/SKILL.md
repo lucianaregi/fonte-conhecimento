@@ -14,6 +14,7 @@ Cria ou altera arquivos de documentação. Não altera código.
 
   > ⚠️ **Não verificado no código**: o retry em produção depende da configuração do gateway, que não está versionada neste repositório.
 - **Motivos não se inferem do código**: a razão de uma decisão vem do usuário ou de fontes como issues, PRs e documentos existentes. Não inventá-la.
+- **Autoria**: não incluir, por iniciativa própria, atribuição, assinatura, crédito ou identificação do agente, nem indicação de que o conteúdo foi gerado por IA. Só incluir se o usuário pedir ou uma regra explícita do projeto exigir.
 - **Local e formato existentes**: salvar onde o projeto já mantém documentação (ex.: `docs/`, `docs/adr/`) e seguir os modelos que já existem.
 - **Concisão**: preferir listas e tabelas curtas. Usar diagramas só quando esclarecem um fluxo; Mermaid apenas se o destino o renderiza.
 

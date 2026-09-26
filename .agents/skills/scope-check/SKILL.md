@@ -21,6 +21,7 @@ Verifica se cada alteração é necessária para cumprir o pedido. Em revisão, 
 | Formatação, ordem de imports ou estilo em trechos que a tarefa não tocou | Não |
 | Dependência nova ou atualizada que a tarefa não exige | Não |
 | Funcionalidade ou opção extra não pedida | Não |
+| Atribuição, assinatura ou identificação do agente inserida por ele sem pedido | Não: remover (atribuições preexistentes permanecem) |
 
 ## Procedimento
 

@@ -13,6 +13,8 @@ Cria commits locais. Não altera código: se algo impedir o commit, o agente par
 - Não usar `--no-verify`. Se um hook falhar, relatar a falha em vez de contorná-la.
 - Não commitar secrets (senhas, tokens, chaves privadas, `.env` com valores reais).
 - Não corrigir código para conseguir commitar. Falha de build, teste ou hook interrompe o processo.
+- Não incluir, por iniciativa própria, atribuição, assinatura, crédito ou identificação do agente, nem indicação de que o conteúdo foi gerado por IA. Só incluir se o usuário pedir ou uma regra explícita do projeto exigir.
+- Preservar a identidade Git configurada. Não deduzir atribuição ou coautoria a partir de commits existentes: exemplos no histórico não são regra do projeto.
 
 ## Procedimento
 

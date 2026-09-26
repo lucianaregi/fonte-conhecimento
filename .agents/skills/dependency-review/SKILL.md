@@ -7,6 +7,8 @@ description: Avalia a adição, atualização ou remoção de dependências de t
 
 Avalia e recomenda. Só aplica a mudança quando o usuário a pediu e a recomendação for prosseguir. Nos demais casos, e sempre que houver ponto marcado para decisão humana, apresentar a recomendação e aguardar. Itens não verificados não impedem a aplicação, mas precisam ser informados.
 
+Não incluir, por iniciativa própria, atribuição, assinatura, crédito ou identificação do agente, nem indicação de que o conteúdo foi gerado por IA. Só incluir se o usuário pedir ou uma regra explícita do projeto exigir.
+
 ## Regra de verificação
 
 Manutenção, licença, versões e vulnerabilidades devem vir de uma fonte consultada: registro de pacotes, repositório do projeto, arquivo de licença ou ferramenta de auditoria do ecossistema (ex.: `npm audit`, `pip-audit`, `osv-scanner`). Não afirmar nada disso de memória. Se não for possível consultar, marcar o item como **não verificado**.

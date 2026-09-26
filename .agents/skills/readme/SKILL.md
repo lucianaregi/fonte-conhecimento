@@ -14,6 +14,7 @@ Altera apenas o README.
 - **Atualização conservadora**: manter o idioma, o tom e as seções úteis do README existente. Alterar apenas o que está desatualizado ou foi pedido.
 - **Tom direto**: sem adjetivos de marketing nem promessas de funcionalidades inexistentes.
 - **Sem dados sensíveis**: nenhuma credencial ou valor real em exemplos de configuração.
+- **Autoria**: não incluir, por iniciativa própria, atribuição, assinatura, crédito ou identificação do agente, nem indicação de que o conteúdo foi gerado por IA. Só incluir se o usuário pedir ou uma regra explícita do projeto exigir.
 - **Sem seções vazias ou especulativas**, como um roadmap não pedido.
 
 ## Estrutura base
