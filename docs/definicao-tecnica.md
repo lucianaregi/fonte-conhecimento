@@ -2,7 +2,7 @@
 
 Este documento é a referência atual do escopo do Fonte. Descreve o que a v1 deve entregar e separa o que já está implementado do que ainda está previsto.
 
-> **Estado atual do código**: o repositório contém a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)) e o núcleo local da indexação (leitura e chunking de Markdown, em [Fonte.Api/Indexing/](../Fonte.Api/Indexing/)), com testes. Endpoints de indexação e perguntas, integrações, observabilidade e CI ainda **não estão implementados**.
+> **Estado atual do código**: o repositório contém a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)), o núcleo local da indexação (leitura e chunking de Markdown, em [Fonte.Api/Indexing/](../Fonte.Api/Indexing/)) e a geração de embeddings dos chunks com Gemini (em [Fonte.Api/Embeddings/](../Fonte.Api/Embeddings/)), com testes. Armazenamento no Qdrant, endpoints de indexação e perguntas, demais integrações, observabilidade e CI ainda **não estão implementados**.
 
 ## Contexto
 
@@ -71,13 +71,13 @@ Se os documentos não fornecerem contexto suficiente, o sistema deve informar is
 |---|---|---|
 | Aplicação | .NET com ASP.NET Core Minimal API | Implementado: `net10.0`, `Microsoft.NET.Sdk.Web` ([Fonte.Api.csproj](../Fonte.Api/Fonte.Api.csproj)) |
 | Testes | Testes automatizados | Implementado: xUnit + `Microsoft.AspNetCore.Mvc.Testing` ([Fonte.Tests.csproj](../Fonte.Tests/Fonte.Tests.csproj)) |
-| Embeddings | Modelo de embeddings do Gemini (Gemini API) | Previsto |
+| Embeddings | Modelo de embeddings do Gemini (Gemini API) | Implementado: `gemini-embedding-2` via SDK `Google.GenAI`, exposto como `IEmbeddingGenerator` (`Microsoft.Extensions.AI`). Ainda não usado por nenhum endpoint. |
 | Geração | Modelo generativo do Gemini (Gemini API) | Previsto |
 | Busca vetorial | Qdrant Cloud | Previsto |
 | Observabilidade | OpenTelemetry, `ActivitySource`, `Meter`, `ILogger`, Grafana Cloud | Previsto |
 | CI | GitHub Actions | Previsto |
 
-Os modelos específicos do Gemini (nomes e versões) ainda não foram escolhidos.
+O modelo generativo do Gemini ainda não foi escolhido.
 
 ### Restrições
 
@@ -111,8 +111,26 @@ Decisões registradas em [plans/001-indexacao-markdown.md](plans/001-indexacao-m
 
 **Em aberto**:
 
-- a associação do embedding ao chunk e a estratégia de ID dos pontos no Qdrant;
+- a estratégia de ID dos pontos no Qdrant;
 - o comportamento da reindexação (substituir tudo ou atualizar incrementalmente) não foi definido.
+
+### Embeddings dos chunks (implementado)
+
+Decisões registradas em [plans/002-embeddings-gemini.md](plans/002-embeddings-gemini.md).
+
+| Tema | Decisão | Código |
+|---|---|---|
+| Contrato | `IEmbeddingGenerator<string, Embedding<float>>`, fornecido pelo SDK `Google.GenAI`. `ChunkEmbedder` recebe `DocumentChunk` e retorna `EmbeddedChunk` (chunk + vetor). | `ChunkEmbedder`, `EmbeddedChunk` |
+| Modelo e dimensões | `gemini-embedding-2`, 768 dimensões por padrão (faixa aceita: 128 a 3072). Trocar modelo ou dimensões exige reindexar. | `GeminiOptions` |
+| Texto enviado | `title: {DocumentPath} \| text: {Content}`, formato documentado para documentos no `gemini-embedding-2`. | `ChunkEmbedder` |
+| Chamadas | Um chunk por chamada, em sequência. Sem retry e sem paralelismo. | `ChunkEmbedder` |
+| Conferência | Exceção se a chamada não retornar exatamente um vetor ou se a dimensão for diferente da configurada. | `ChunkEmbedder` |
+
+**Em aberto**:
+
+- tamanho do lote por requisição (a documentação da Gemini API não informa o máximo);
+- política de retry para erros 429 e 5xx;
+- formato e fluxo do embedding da pergunta.
 
 ## Fluxo de pergunta
 
@@ -205,7 +223,15 @@ A pasta de documentos e o tamanho dos chunks ficam na seção `Documents` do [ap
 | `Documents:Path` | `documents` | Obrigatória. Caminho relativo é resolvido a partir do ContentRoot da API. |
 | `Documents:MaxChunkSize` | `1000` | Maior que 0. Heurística inicial. |
 
-**Em aberto**: o mecanismo de configuração local dos segredos (por exemplo, user secrets ou variáveis de ambiente).
+O Gemini fica na seção `Gemini` (`GeminiOptions`), validada na inicialização, exceto a chave:
+
+| Chave | Padrão | Regra |
+|---|---|---|
+| `Gemini:ApiKey` | — | Segredo. Em desenvolvimento, via .NET user-secrets (`dotnet user-secrets set Gemini:ApiKey <chave> --project Fonte.Api`); nos demais ambientes, via variável `Gemini__ApiKey`. Exigida apenas ao gerar embeddings. As variáveis `GEMINI_API_KEY` e `GOOGLE_API_KEY` não são usadas. |
+| `Gemini:EmbeddingModel` | `gemini-embedding-2` | Obrigatória. |
+| `Gemini:EmbeddingDimensions` | `768` | De 128 a 3072. |
+
+**Em aberto**: a configuração dos segredos do Qdrant e do Grafana/OpenTelemetry.
 
 ## Definição de pronto da v1
 
