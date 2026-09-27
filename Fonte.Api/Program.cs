@@ -99,6 +99,7 @@ var app = builder.Build();
 
 app.MapGet("/health", () => Results.Ok());
 app.MapDocumentIndexing();
+app.MapQuestions();
 
 app.Run();
 

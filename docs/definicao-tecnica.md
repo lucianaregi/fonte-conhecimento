@@ -2,7 +2,7 @@
 
 Este documento é a referência atual do escopo do Fonte. Descreve o que a v1 deve entregar e separa o que já está implementado do que ainda está previsto.
 
-> **Estado atual do código**: o repositório contém a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)), o núcleo local da indexação (leitura e chunking de Markdown, em [Fonte.Api/Indexing/](../Fonte.Api/Indexing/)), a geração de embeddings dos chunks com Gemini (em [Fonte.Api/Embeddings/](../Fonte.Api/Embeddings/)), o armazenamento dos chunks vetorizados no Qdrant (em [Fonte.Api/VectorStore/](../Fonte.Api/VectorStore/)), o fluxo completo de indexação com `POST /documents/index`, a recuperação semântica de chunks para perguntas (em [Fonte.Api/Retrieval/](../Fonte.Api/Retrieval/)), a geração de resposta fundamentada no contexto recuperado (em [Fonte.Api/Answering/](../Fonte.Api/Answering/)) e a fundação de observabilidade (em [Fonte.Api/Observability/](../Fonte.Api/Observability/)), com testes. `POST /questions`, que junta recuperação e geração, a conexão efetiva com o Grafana Cloud e CI ainda **não estão implementados**.
+> **Estado atual do código**: o repositório contém a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)), o núcleo local da indexação (leitura e chunking de Markdown, em [Fonte.Api/Indexing/](../Fonte.Api/Indexing/)), a geração de embeddings dos chunks com Gemini (em [Fonte.Api/Embeddings/](../Fonte.Api/Embeddings/)), o armazenamento dos chunks vetorizados no Qdrant (em [Fonte.Api/VectorStore/](../Fonte.Api/VectorStore/)), o fluxo completo de indexação com `POST /documents/index`, a recuperação semântica de chunks para perguntas (em [Fonte.Api/Retrieval/](../Fonte.Api/Retrieval/)), a geração de resposta fundamentada no contexto recuperado (em [Fonte.Api/Answering/](../Fonte.Api/Answering/)), o endpoint `POST /questions`, que junta recuperação e geração, e a fundação de observabilidade (em [Fonte.Api/Observability/](../Fonte.Api/Observability/)), com testes. A conexão efetiva com o Grafana Cloud e CI ainda **não estão implementados**.
 
 ## Contexto
 
@@ -48,16 +48,18 @@ O Fonte:
 5. retorna a resposta;
 6. informa quais trechos e documentos fundamentaram a resposta.
 
-Exemplo conceitual de resposta (o contrato final ainda não foi definido):
+Exemplo de resposta (contrato completo em [`POST /questions`](#post-questions)):
 
 ```json
 {
-  "answer": "ActivitySource é utilizado para...",
+  "status": "answered",
+  "answer": "O ActivitySource é o ponto de partida para criar traces próprios...",
   "sources": [
     {
+      "number": 1,
       "document": "observabilidade.md",
       "chunk": 3,
-      "score": 0.89
+      "score": 0.7694
     }
   ]
 }
@@ -71,9 +73,9 @@ Se os documentos não fornecerem contexto suficiente, o sistema deve informar is
 |---|---|---|
 | Aplicação | .NET com ASP.NET Core Minimal API | Implementado: `net10.0`, `Microsoft.NET.Sdk.Web` ([Fonte.Api.csproj](../Fonte.Api/Fonte.Api.csproj)) |
 | Testes | Testes automatizados | Implementado: xUnit + `Microsoft.AspNetCore.Mvc.Testing` ([Fonte.Tests.csproj](../Fonte.Tests/Fonte.Tests.csproj)) |
-| Embeddings | Modelo de embeddings do Gemini (Gemini API) | Implementado: `gemini-embedding-2` via SDK `Google.GenAI`, exposto como `IEmbeddingGenerator` (`Microsoft.Extensions.AI`). Ainda não usado por nenhum endpoint. |
-| Geração | Modelo generativo do Gemini (Gemini API) | Implementado: `gemini-3.6-flash` via SDK `Google.GenAI`, exposto como `IChatClient` (`Microsoft.Extensions.AI`). Ainda não usado por nenhum endpoint. |
-| Busca vetorial | Qdrant Cloud | Armazenamento e busca implementados com o SDK `Qdrant.Client` (`ChunkVectorStore`). A busca ainda não é usada por nenhum endpoint. |
+| Embeddings | Modelo de embeddings do Gemini (Gemini API) | Implementado: `gemini-embedding-2` via SDK `Google.GenAI`, exposto como `IEmbeddingGenerator` (`Microsoft.Extensions.AI`). Usado na indexação e nas perguntas. |
+| Geração | Modelo generativo do Gemini (Gemini API) | Implementado: `gemini-3.6-flash` via SDK `Google.GenAI`, exposto como `IChatClient` (`Microsoft.Extensions.AI`). Usado por `POST /questions`. |
+| Busca vetorial | Qdrant Cloud | Armazenamento e busca implementados com o SDK `Qdrant.Client` (`ChunkVectorStore`). A busca é usada por `POST /questions`. |
 | Observabilidade | OpenTelemetry, `ActivitySource`, `Meter`, `ILogger`, Grafana Cloud | Implementado para a indexação: traces, métricas e logs com OpenTelemetry e exportação OTLP opcional. A conexão com o Grafana Cloud depende das credenciais da conta. |
 | CI | GitHub Actions | Previsto |
 
@@ -164,7 +166,7 @@ N é configurável; o valor inicial é **3**.
 
 ### Recuperação (implementado)
 
-Decisões registradas em [plans/005-recuperacao-semantica.md](plans/005-recuperacao-semantica.md). `ChunkRetriever.RetrieveAsync(pergunta)` cobre as três primeiras etapas do fluxo; ainda não há endpoint nem geração de resposta.
+Decisões registradas em [plans/005-recuperacao-semantica.md](plans/005-recuperacao-semantica.md). `ChunkRetriever.RetrieveAsync(pergunta)` cobre as três primeiras etapas do fluxo.
 
 | Tema | Decisão | Código |
 |---|---|---|
@@ -177,7 +179,7 @@ Decisões registradas em [plans/005-recuperacao-semantica.md](plans/005-recupera
 
 ### Geração de resposta (implementado)
 
-Decisões registradas em [plans/006-geracao-resposta.md](plans/006-geracao-resposta.md). `AnswerGenerator.GenerateAsync(pergunta, trechos)` cobre as etapas de construção do contexto e geração; ainda não há endpoint.
+Decisões registradas em [plans/006-geracao-resposta.md](plans/006-geracao-resposta.md). `AnswerGenerator.GenerateAsync(pergunta, trechos)` cobre as etapas de construção do contexto e geração.
 
 | Tema | Decisão | Código |
 |---|---|---|
@@ -188,7 +190,7 @@ Decisões registradas em [plans/006-geracao-resposta.md](plans/006-geracao-respo
 | Fontes | `Context` são exatamente os trechos enviados, na ordem do prompt (`Context[i]` é o trecho `[i+1]`). O vínculo vem da recuperação, não de uma escolha do modelo. | `AnswerGenerator` |
 | Respostas inválidas | Exceção, sem expor conteúdo, para prompt bloqueado, ausência de motivo de término, resposta cortada (`Length`), geração interrompida (`ContentFilter` e outros), texto vazio, JSON inválido, status desconhecido e `answered` sem texto. Sem retry. | `AnswerGenerator` |
 
-**Em aberto**: threshold de score e seleção de trechos, citações `[n]` feitas pelo modelo como informação adicional e o contrato exato de requisição e resposta de `POST /questions`.
+**Em aberto**: threshold de score e seleção de trechos, e citações `[n]` feitas pelo modelo como informação adicional.
 
 ## API da v1
 
@@ -198,7 +200,7 @@ A v1 tem três endpoints.
 |---|---|---|
 | `GET /health` | Health check | Implementado: retorna `200 OK` sem corpo |
 | `POST /documents/index` | Indexa ou reindexa os documentos da pasta configurada | Implementado (ver abaixo) |
-| `POST /questions` | Recebe uma pergunta e retorna resposta + fontes | Previsto |
+| `POST /questions` | Recebe uma pergunta e retorna resposta + fontes | Implementado (ver abaixo) |
 
 ### `POST /documents/index`
 
@@ -215,6 +217,32 @@ Decisões registradas em [plans/004-indexacao-endpoint-observabilidade.md](plans
 - **Concorrência**: uma indexação por vez em cada instância da aplicação (`SemaphoreSlim`); a segunda requisição simultânea recebe 409 sem esperar. Não há coordenação entre instâncias.
 - **Configuração ausente**: Gemini e Qdrant são resolvidos dentro da indexação, antes de ler documentos ou chamar serviços externos. A API e `/health` sobem sem credenciais; a falha é registrada como falha da indexação (log e métrica) e pode ser tentada de novo.
 - **Cancelamento**: a desconexão do cliente cancela a indexação. Antes da troca do alias, o índice ativo não muda; a collection incompleta é limpa na próxima indexação.
+
+### `POST /questions`
+
+Decisões registradas em [plans/007-endpoint-perguntas.md](plans/007-endpoint-perguntas.md). O endpoint coordena `ChunkRetriever` e `AnswerGenerator`, sem camada própria; logs, métricas e spans ficam nesses serviços.
+
+Requisição:
+
+```json
+{ "question": "Qual é a função do ActivitySource?" }
+```
+
+`question` é obrigatória, não pode ser vazia nem só espaços e tem no máximo 2000 caracteres.
+
+| Status | Quando | Corpo |
+|---|---|---|
+| `200 OK` | Pergunta processada | `{ "status", "answer", "sources" }` (abaixo) |
+| `400 Bad Request` | `question` ausente, vazia, só com espaços ou com mais de 2000 caracteres; corpo ausente ou JSON malformado | `ValidationProblemDetails` com `errors.question` (a pergunta não é repetida) ou o `400` nativo do ASP.NET |
+| `500` | Falha de configuração (chave ou URL ausente), do Gemini, do Qdrant (inclusive índice ainda não criado) ou resposta inválida do modelo | Resposta padrão do ASP.NET; a etapa aparece nos logs |
+
+| `status` | `answer` | `sources` |
+|---|---|---|
+| `answered` | Resposta do modelo | Trechos enviados como contexto, na ordem |
+| `insufficient_context` | Mensagem fixa do Fonte | `[]` |
+| `no_context` | Mensagem fixa do Fonte | `[]` |
+
+Cada fonte tem `number` (numeração `[n]` do trecho no prompt), `document` (`DocumentPath`), `chunk` (`ChunkIndex`) e `score` (similaridade da busca). O conteúdo dos trechos não é retornado.
 
 ## Observabilidade
 
@@ -255,9 +283,9 @@ Instrumentação própria no `AnswerGenerator`, no mesmo `ActivitySource` e `Met
 - **Logs**: falha como erro, com `Stage` = `configuration`, `generation` ou `response`; sucesso em nível Debug, com status, quantidade de trechos e duração.
 - **Privacidade**: pergunta, trechos, prompt montado, JSON e texto da resposta não entram em logs, traces nem métricas; `DocumentPath` fica fora de traces e métricas. A instrumentação automática de `IChatClient` do `Microsoft.Extensions.AI` não é usada.
 
-### Perguntas (previsto)
+### Perguntas (implementado)
 
-Uma requisição de pergunta deve poder ser acompanhada aproximadamente assim:
+Uma requisição de pergunta é acompanhada assim (o span HTTP é do ASP.NET Core; os demais, dos serviços do Fonte):
 
 ```text
 POST /questions

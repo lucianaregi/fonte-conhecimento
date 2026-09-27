@@ -4,7 +4,7 @@ Aplicação .NET que usa RAG (_Retrieval-Augmented Generation_) para responder p
 
 A stack é ASP.NET Core Minimal API, Gemini API (embeddings e geração), Qdrant Cloud (busca vetorial) e OpenTelemetry (exportação OTLP, com envio ao Grafana Cloud previsto).
 
-O projeto está em desenvolvimento. Hoje a API expõe `GET /health` e `POST /documents/index`, que indexa os documentos Markdown de `Fonte.Api/documents/` no Qdrant. A recuperação semântica e a geração de respostas já existem internamente; o endpoint de perguntas (`POST /questions`) ainda não foi implementado.
+O projeto está em desenvolvimento. Hoje a API expõe `GET /health`, `POST /documents/index`, que indexa os documentos Markdown de `Fonte.Api/documents/` no Qdrant, e `POST /questions`, que responde a uma pergunta com base nos documentos indexados e informa as fontes usadas.
 
 A definição completa (fluxos, API da v1, observabilidade, configuração, definição de pronto e fora do escopo) está em [docs/definicao-tecnica.md](docs/definicao-tecnica.md).
 
@@ -26,6 +26,12 @@ A API sobe em `http://localhost:5023` (perfil `http` em [launchSettings.json](Fo
 
 ```bash
 curl -X POST http://localhost:5023/documents/index
+```
+
+Para fazer uma pergunta:
+
+```bash
+curl -X POST http://localhost:5023/questions -H "Content-Type: application/json" -d '{"question": "Qual é a função do ActivitySource?"}'
 ```
 
 ## Como testar
