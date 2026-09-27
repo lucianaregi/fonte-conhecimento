@@ -14,8 +14,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Fonte.Tests.Indexing;
 
-public sealed class DocumentIndexingEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public sealed class DocumentIndexingEndpointTests(FonteApiFactory factory)
+    : IClassFixture<FonteApiFactory>, IDisposable
 {
     private const int Dimensions = 128;
     private const string ActiveCollection = "fonte-chunks-20260920100000000";

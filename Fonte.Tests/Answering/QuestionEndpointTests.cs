@@ -17,8 +17,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Fonte.Tests.Answering;
 
-public sealed class QuestionEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public sealed class QuestionEndpointTests(FonteApiFactory factory)
+    : IClassFixture<FonteApiFactory>, IDisposable
 {
     private const int Dimensions = 128;
     private const string Question = "Qual é a função do ActivitySource?";
@@ -163,6 +163,8 @@ public sealed class QuestionEndpointTests(WebApplicationFactory<Program> factory
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.True(body.GetProperty("errors").TryGetProperty("question", out _), scenario);
+        Assert.Equal("Requisição inválida", body.GetProperty("title").GetString());
+        Assert.Matches("^[0-9a-f]{32}$", body.GetProperty("traceId").GetString());
         Assert.DoesNotContain("aaaa", body.GetRawText());
         Assert.Empty(Generator.Calls);
         Assert.Empty(Gateway.Operations);
@@ -189,6 +191,7 @@ public sealed class QuestionEndpointTests(WebApplicationFactory<Program> factory
         var response = await app.CreateClient().PostAsync("/questions", new StringContent(content, Encoding.UTF8, "application/json"));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
         Assert.Empty(Gateway.Operations);
     }
 

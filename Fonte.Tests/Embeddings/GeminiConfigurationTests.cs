@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace Fonte.Tests.Embeddings;
 
-public class GeminiConfigurationTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public class GeminiConfigurationTests(FonteApiFactory factory) : IClassFixture<FonteApiFactory>
 {
     [Theory]
     [InlineData("Gemini:EmbeddingDimensions", "127")]

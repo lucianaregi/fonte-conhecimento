@@ -14,7 +14,7 @@ A definição completa (fluxos, API da v1, observabilidade, configuração, defi
 
 ## Configuração local
 
-Copie `Fonte.Api/appsettings.Development.example.json` para `Fonte.Api/appsettings.Development.json` e preencha as credenciais do Gemini e do Qdrant (a URL do Qdrant usa a porta gRPC `6334`). Esse arquivo é ignorado pelo Git. Detalhes em [Configuração e segredos](docs/definicao-tecnica.md#configuração-e-segredos).
+Copie `Fonte.Api/appsettings.Development.example.json` para `Fonte.Api/appsettings.Development.json` e preencha as credenciais do Gemini e do Qdrant (a URL do Qdrant usa a porta gRPC `6334`). Esse arquivo é ignorado pelo Git. A exportação de telemetria para o Grafana Cloud é opcional e usa o mesmo arquivo (chaves `OTEL_EXPORTER_OTLP_*`). Detalhes em [Configuração e segredos](docs/definicao-tecnica.md#configuração-e-segredos).
 
 ## Como executar
 

@@ -76,7 +76,7 @@ Se os documentos não fornecerem contexto suficiente, o sistema deve informar is
 | Embeddings | Modelo de embeddings do Gemini (Gemini API) | Implementado: `gemini-embedding-2` via SDK `Google.GenAI`, exposto como `IEmbeddingGenerator` (`Microsoft.Extensions.AI`). Usado na indexação e nas perguntas. |
 | Geração | Modelo generativo do Gemini (Gemini API) | Implementado: `gemini-3.6-flash` via SDK `Google.GenAI`, exposto como `IChatClient` (`Microsoft.Extensions.AI`). Usado por `POST /questions`. |
 | Busca vetorial | Qdrant Cloud | Armazenamento e busca implementados com o SDK `Qdrant.Client` (`ChunkVectorStore`). A busca é usada por `POST /questions`. |
-| Observabilidade | OpenTelemetry, `ActivitySource`, `Meter`, `ILogger`, Grafana Cloud | Implementado para a indexação: traces, métricas e logs com OpenTelemetry e exportação OTLP opcional. A conexão com o Grafana Cloud depende das credenciais da conta. |
+| Observabilidade | OpenTelemetry, `ActivitySource`, `Meter`, `ILogger`, Grafana Cloud | Implementado para indexação, recuperação, geração e endpoints: traces, métricas e logs com OpenTelemetry e exportação OTLP para o Grafana Cloud, configurada no arquivo local (ver [plans/008-observabilidade-grafana.md](plans/008-observabilidade-grafana.md)). |
 | CI | GitHub Actions | Previsto |
 
 O modelo generativo foi escolhido na etapa 006 com base na documentação oficial consultada em 26/09/2026 (ver [plans/006-geracao-resposta.md](plans/006-geracao-resposta.md)); é configurável em `Gemini:GenerationModel`.
@@ -212,7 +212,7 @@ Decisões registradas em [plans/004-indexacao-endpoint-observabilidade.md](plans
 | `200 OK` | Publicada, mas a limpeza das collections antigas falhou | Igual, com `"cleanupCompleted": false`; as sobras são removidas na próxima indexação |
 | `409 Conflict` | Já existe uma indexação em andamento nesta instância | `ProblemDetails` |
 | `422 Unprocessable Entity` | Nenhum documento Markdown na pasta configurada | `ProblemDetails`; índice ativo não alterado |
-| `500` | Falha de configuração (chave ou URL ausente), de leitura, do Gemini ou do Qdrant | Resposta padrão do ASP.NET; índice ativo não alterado |
+| `500` | Falha de configuração (chave ou URL ausente), de leitura, do Gemini ou do Qdrant | `ProblemDetails` do [contrato de erros](#contrato-de-erros); índice ativo não alterado |
 
 - **Concorrência**: uma indexação por vez em cada instância da aplicação (`SemaphoreSlim`); a segunda requisição simultânea recebe 409 sem esperar. Não há coordenação entre instâncias.
 - **Configuração ausente**: Gemini e Qdrant são resolvidos dentro da indexação, antes de ler documentos ou chamar serviços externos. A API e `/health` sobem sem credenciais; a falha é registrada como falha da indexação (log e métrica) e pode ser tentada de novo.
@@ -233,8 +233,8 @@ Requisição:
 | Status | Quando | Corpo |
 |---|---|---|
 | `200 OK` | Pergunta processada | `{ "status", "answer", "sources" }` (abaixo) |
-| `400 Bad Request` | `question` ausente, vazia, só com espaços ou com mais de 2000 caracteres; corpo ausente ou JSON malformado | `ValidationProblemDetails` com `errors.question` (a pergunta não é repetida) ou o `400` nativo do ASP.NET |
-| `500` | Falha de configuração (chave ou URL ausente), do Gemini, do Qdrant (inclusive índice ainda não criado) ou resposta inválida do modelo | Resposta padrão do ASP.NET; a etapa aparece nos logs |
+| `400 Bad Request` | `question` ausente, vazia, só com espaços ou com mais de 2000 caracteres; corpo ausente ou JSON malformado | `ValidationProblemDetails` com `errors.question` (a pergunta não é repetida) ou `ProblemDetails`, ambos com título "Requisição inválida" e `traceId` ([contrato de erros](#contrato-de-erros)) |
+| `500` | Falha de configuração (chave ou URL ausente), do Gemini, do Qdrant (inclusive índice ainda não criado) ou resposta inválida do modelo | `ProblemDetails` do [contrato de erros](#contrato-de-erros); a etapa aparece nos logs |
 
 | `status` | `answer` | `sources` |
 |---|---|---|
@@ -243,6 +243,29 @@ Requisição:
 | `no_context` | Mensagem fixa do Fonte | `[]` |
 
 Cada fonte tem `number` (numeração `[n]` do trecho no prompt), `document` (`DocumentPath`), `chunk` (`ChunkIndex`) e `score` (similaridade da busca). O conteúdo dos trechos não é retornado.
+
+### Contrato de erros
+
+Decisão registrada em [plans/008-observabilidade-grafana.md](plans/008-observabilidade-grafana.md), tomada quando o isolamento dos testes mostrou que o `500` dependia da Developer Exception Page. O contrato é da aplicação (`ProblemDetailsRegistration`: `AddProblemDetails`, `UseExceptionHandler` e `UseStatusCodePages`) e é igual em `Development`, `Testing` e produção.
+
+- Toda resposta de erro é `application/problem+json` e tem `traceId`: os 32 caracteres hexadecimais do trace da requisição, o mesmo exportado para o Grafana/Tempo e presente nos logs.
+- **`500`** (exceção não tratada), exatamente:
+
+  ```json
+  {
+    "type": "https://tools.ietf.org/html/rfc9110#section-15.6.1",
+    "title": "Erro interno do servidor",
+    "status": 500,
+    "detail": "Ocorreu um erro inesperado ao processar a requisição.",
+    "traceId": "4bf92f3577b34da6a3ce929d0e0e4736"
+  }
+  ```
+
+  Nenhuma mensagem, tipo ou stack trace da exceção, credencial, pergunta, resposta, conteúdo de chunk ou detalhe dos SDKs. A exceção fica apenas no log de erro, correlacionada pelo `traceId`.
+- **Respostas de erro sem corpo** também recebem `ProblemDetails` (`UseStatusCodePages`): `400` nativo (corpo ausente ou JSON malformado, "Requisição inválida"), `404` (rota inexistente, "Recurso não encontrado") e `405` (método não permitido, "Método não permitido").
+- **`400` de validação**: `ValidationProblemDetails` com título "Requisição inválida" e `errors`.
+- **`409` e `422`** de `POST /documents/index`: títulos e detalhes definidos pelo endpoint, com `traceId`.
+- Corpo ausente ou JSON malformado resultam em `400` em todos os ambientes (`ThrowOnBadRequest = false`).
 
 ## Observabilidade
 
@@ -257,7 +280,8 @@ POST /documents/index           ← ASP.NET Core (automático)
 ├── embedding.create
 │   └── HTTP → Gemini           ← System.Net.Http (automático)
 └── vectorstore.replace         ← fonte.cleanup.completed
-    └── HTTP/gRPC → Qdrant      ← System.Net.Http (automático)
+    └── Grpc.Net.Client.GrpcOut ← Grpc.Net.Client (automático)
+        └── HTTP → Qdrant       ← System.Net.Http (automático)
 ```
 
 - **Traces**: em falha, o span da etapa recebe status `Error` e `error.type` (tipo da exceção), sem mensagem nem stack trace. `/health` não gera trace.
@@ -293,12 +317,15 @@ POST /questions
 ├── embedding.create
 │   └── Gemini
 │
-├── retrieval.search
-│   └── Qdrant
+├── retrieval.search                     fonte.retrieval.top_k, fonte.retrieval.results
+│   └── Grpc.Net.Client.GrpcOut          grpc.method, grpc.status_code
+│       └── HTTP → Qdrant
 │
-└── answer.generate
-    └── Gemini
+└── answer.generate                      gen_ai.request.model, gen_ai.usage.*, fonte.answer.status
+    └── HTTP → Gemini
 ```
+
+`Grpc.Net.Client.GrpcOut` vem do `ActivitySource` nativo do `Grpc.Net.Client` (`AddSource("Grpc.Net.Client")`); sem ele, a chamada gRPC ao Qdrant ficaria fora do trace e o span HTTP perderia o pai exportado. Uma resposta de erro traz o `traceId` desse trace.
 
 ### Traces
 
@@ -341,7 +368,7 @@ O repositório pode fornecer exemplos de configuração sem valores sensíveis. 
 
 **Segredos em desenvolvimento**: ficam no `Fonte.Api/appsettings.Development.json` local, ignorado pelo Git e excluído do `dotnet publish`. Para criá-lo, copie [appsettings.Development.example.json](../Fonte.Api/appsettings.Development.example.json), que é versionado e mostra só a estrutura, e preencha os valores. Nos demais ambientes, use variáveis de ambiente (ex.: `Gemini__ApiKey`). Vale a precedência padrão do ASP.NET Core: `appsettings.json` → `appsettings.{Ambiente}.json` → variáveis de ambiente → linha de comando, então variáveis de ambiente sobrescrevem os arquivos.
 
-**Risco conhecido**: os testes de integração (`WebApplicationFactory`) rodam no ambiente `Development` e carregam o `appsettings.Development.json` local. Os testes atuais que envolvem Gemini ou Qdrant zeram chave e URL ou injetam fakes; o isolamento completo será tratado antes de ampliar testes de integração que possam alcançar serviços externos.
+**Testes isolados do ambiente local**: os testes de integração usam a `FonteApiFactory`, que sobe a aplicação no ambiente `Testing`. Esse ambiente não carrega o `appsettings.Development.json`, e a exportação OTLP fica desligada nele mesmo que o endpoint venha de uma variável de ambiente. Testes automatizados não consomem credenciais locais, não chamam Gemini nem Qdrant reais e não exportam telemetria para o backend real.
 
 A pasta de documentos e o tamanho dos chunks ficam na seção `Documents` do [appsettings.json](../Fonte.Api/appsettings.json) (`DocumentsOptions`), validada na inicialização:
 
@@ -373,19 +400,17 @@ A recuperação fica na seção `Retrieval` (`RetrievalOptions`), validada na in
 |---|---|---|
 | `Retrieval:TopK` | `3` | Maior ou igual a 1. Quantidade máxima de chunks retornados por pergunta. |
 
-A telemetria é exportada por OTLP somente quando `OTEL_EXPORTER_OTLP_ENDPOINT` está configurado; sem ele, nada é enviado. As variáveis seguem o padrão do OpenTelemetry e nenhuma entra no repositório:
+A telemetria (traces, métricas e logs) é exportada por OTLP somente quando `OTEL_EXPORTER_OTLP_ENDPOINT` está configurado e o ambiente não é `Testing`; sem isso, nada é enviado. As chaves seguem o padrão do OpenTelemetry e nenhum valor entra no repositório. Em desenvolvimento, ficam na raiz do `appsettings.Development.json` local (o exemplo versionado já traz as três chaves, com o protocolo preenchido); nos demais ambientes, em variáveis de ambiente:
 
 | Variável | Uso |
 |---|---|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Endpoint base. No Grafana Cloud: `https://otlp-gateway-<região>.grafana.net/otlp` |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` para o Grafana Cloud (o padrão do SDK é `grpc`) |
-| `OTEL_EXPORTER_OTLP_HEADERS` | Cabeçalho de autenticação gerado no portal do Grafana Cloud (segredo) |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Cabeçalho de autenticação gerado no portal do Grafana Cloud, no formato `Authorization=Basic <credencial>` (segredo) |
 
-Os valores do Grafana Cloud são gerados no portal (stack → OpenTelemetry → Configure). O serviço é identificado como `fonte`.
+Os valores do Grafana Cloud são gerados no portal (stack → OpenTelemetry → Configure). Com `http/protobuf`, o exportador acrescenta `/v1/traces`, `/v1/metrics` e `/v1/logs` ao endpoint base. O serviço é identificado como `fonte` (`AddService` no código); `OTEL_SERVICE_NAME` não sobrepõe esse nome, enquanto `OTEL_RESOURCE_ATTRIBUTES` pode acrescentar outros atributos (por exemplo, `deployment.environment`). As métricas são exportadas a cada 60 s (padrão do SDK).
 
 As variáveis `OTEL_EXPORTER_OTLP_*` são lidas pelo `IConfiguration` da aplicação (verificado no código-fonte do exportador OTLP), portanto seguem a mesma precedência das demais configurações.
-
-**Em aberto**: confirmar, na primeira conexão real, se `OTEL_SERVICE_NAME` sobrepõe o nome `fonte`.
 
 ## Definição de pronto da v1
 

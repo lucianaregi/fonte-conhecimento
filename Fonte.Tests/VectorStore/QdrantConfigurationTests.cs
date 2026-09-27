@@ -5,7 +5,7 @@ using Qdrant.Client;
 
 namespace Fonte.Tests.VectorStore;
 
-public class QdrantConfigurationTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public class QdrantConfigurationTests(FonteApiFactory factory) : IClassFixture<FonteApiFactory>
 {
     [Theory]
     [InlineData("", "chave", "Qdrant:Url")]

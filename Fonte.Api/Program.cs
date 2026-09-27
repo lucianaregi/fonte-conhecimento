@@ -1,5 +1,6 @@
 using Fonte.Api.Answering;
 using Fonte.Api.Embeddings;
+using Fonte.Api.ErrorHandling;
 using Fonte.Api.Indexing;
 using Fonte.Api.Observability;
 using Fonte.Api.Retrieval;
@@ -12,6 +13,7 @@ using Qdrant.Client;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddFonteOpenTelemetry();
+builder.Services.AddFonteProblemDetails();
 
 builder.Services.AddOptions<DocumentsOptions>()
     .Bind(builder.Configuration.GetSection(DocumentsOptions.SectionName))
@@ -96,6 +98,8 @@ builder.Services.AddSingleton<AnswerMetrics>();
 builder.Services.AddSingleton<AnswerGenerator>();
 
 var app = builder.Build();
+
+app.UseFonteErrorResponses();
 
 app.MapGet("/health", () => Results.Ok());
 app.MapDocumentIndexing();

@@ -1,3 +1,4 @@
+using Fonte.Api.ErrorHandling;
 using Fonte.Api.Retrieval;
 
 namespace Fonte.Api.Answering;
@@ -28,7 +29,9 @@ public static class QuestionEndpoint
             // A mensagem de validação nunca repete a pergunta.
             if (Validate(request.Question) is { } error)
             {
-                return Results.ValidationProblem(new Dictionary<string, string[]> { ["question"] = [error] });
+                return Results.ValidationProblem(
+                    new Dictionary<string, string[]> { ["question"] = [error] },
+                    title: ProblemDetailsRegistration.BadRequestTitle);
             }
 
             var chunks = await retriever.RetrieveAsync(request.Question!, cancellationToken);
