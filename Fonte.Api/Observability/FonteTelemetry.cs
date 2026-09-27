@@ -19,6 +19,7 @@ public static class FonteTelemetry
         public const string EmbeddingCreate = "embedding.create";
         public const string VectorStoreReplace = "vectorstore.replace";
         public const string RetrievalSearch = "retrieval.search";
+        public const string AnswerGenerate = "answer.generate";
     }
 
     public static class Attributes
@@ -30,6 +31,12 @@ public static class FonteTelemetry
         public const string RetrievalTopK = "fonte.retrieval.top_k";
         public const string RetrievalResults = "fonte.retrieval.results";
         public const string RetrievalOutcome = "fonte.retrieval.outcome";
+        public const string AnswerContextChunks = "fonte.answer.context_chunks";
+        public const string AnswerStatus = "fonte.answer.status";
+        public const string AnswerOutcome = "fonte.answer.outcome";
+        public const string GenAiRequestModel = "gen_ai.request.model";
+        public const string GenAiInputTokens = "gen_ai.usage.input_tokens";
+        public const string GenAiOutputTokens = "gen_ai.usage.output_tokens";
         public const string ErrorType = "error.type";
     }
 }

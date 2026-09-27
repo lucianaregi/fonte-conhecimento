@@ -12,6 +12,7 @@ public class GeminiConfigurationTests(WebApplicationFactory<Program> factory) : 
     [InlineData("Gemini:EmbeddingDimensions", "127")]
     [InlineData("Gemini:EmbeddingDimensions", "3073")]
     [InlineData("Gemini:EmbeddingModel", "")]
+    [InlineData("Gemini:GenerationModel", "")]
     public void InvalidConfigurationPreventsStartup(string key, string value)
     {
         var invalid = factory.WithWebHostBuilder(builder => builder.UseSetting(key, value));

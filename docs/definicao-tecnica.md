@@ -2,7 +2,7 @@
 
 Este documento é a referência atual do escopo do Fonte. Descreve o que a v1 deve entregar e separa o que já está implementado do que ainda está previsto.
 
-> **Estado atual do código**: o repositório contém a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)), o núcleo local da indexação (leitura e chunking de Markdown, em [Fonte.Api/Indexing/](../Fonte.Api/Indexing/)), a geração de embeddings dos chunks com Gemini (em [Fonte.Api/Embeddings/](../Fonte.Api/Embeddings/)), o armazenamento dos chunks vetorizados no Qdrant (em [Fonte.Api/VectorStore/](../Fonte.Api/VectorStore/)), o fluxo completo de indexação com `POST /documents/index`, a recuperação semântica de chunks para perguntas (em [Fonte.Api/Retrieval/](../Fonte.Api/Retrieval/)) e a fundação de observabilidade (em [Fonte.Api/Observability/](../Fonte.Api/Observability/)), com testes. `POST /questions`, geração de respostas, conexão efetiva com o Grafana Cloud e CI ainda **não estão implementados**.
+> **Estado atual do código**: o repositório contém a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)), o núcleo local da indexação (leitura e chunking de Markdown, em [Fonte.Api/Indexing/](../Fonte.Api/Indexing/)), a geração de embeddings dos chunks com Gemini (em [Fonte.Api/Embeddings/](../Fonte.Api/Embeddings/)), o armazenamento dos chunks vetorizados no Qdrant (em [Fonte.Api/VectorStore/](../Fonte.Api/VectorStore/)), o fluxo completo de indexação com `POST /documents/index`, a recuperação semântica de chunks para perguntas (em [Fonte.Api/Retrieval/](../Fonte.Api/Retrieval/)), a geração de resposta fundamentada no contexto recuperado (em [Fonte.Api/Answering/](../Fonte.Api/Answering/)) e a fundação de observabilidade (em [Fonte.Api/Observability/](../Fonte.Api/Observability/)), com testes. `POST /questions`, que junta recuperação e geração, a conexão efetiva com o Grafana Cloud e CI ainda **não estão implementados**.
 
 ## Contexto
 
@@ -72,12 +72,12 @@ Se os documentos não fornecerem contexto suficiente, o sistema deve informar is
 | Aplicação | .NET com ASP.NET Core Minimal API | Implementado: `net10.0`, `Microsoft.NET.Sdk.Web` ([Fonte.Api.csproj](../Fonte.Api/Fonte.Api.csproj)) |
 | Testes | Testes automatizados | Implementado: xUnit + `Microsoft.AspNetCore.Mvc.Testing` ([Fonte.Tests.csproj](../Fonte.Tests/Fonte.Tests.csproj)) |
 | Embeddings | Modelo de embeddings do Gemini (Gemini API) | Implementado: `gemini-embedding-2` via SDK `Google.GenAI`, exposto como `IEmbeddingGenerator` (`Microsoft.Extensions.AI`). Ainda não usado por nenhum endpoint. |
-| Geração | Modelo generativo do Gemini (Gemini API) | Previsto |
+| Geração | Modelo generativo do Gemini (Gemini API) | Implementado: `gemini-3.6-flash` via SDK `Google.GenAI`, exposto como `IChatClient` (`Microsoft.Extensions.AI`). Ainda não usado por nenhum endpoint. |
 | Busca vetorial | Qdrant Cloud | Armazenamento e busca implementados com o SDK `Qdrant.Client` (`ChunkVectorStore`). A busca ainda não é usada por nenhum endpoint. |
 | Observabilidade | OpenTelemetry, `ActivitySource`, `Meter`, `ILogger`, Grafana Cloud | Implementado para a indexação: traces, métricas e logs com OpenTelemetry e exportação OTLP opcional. A conexão com o Grafana Cloud depende das credenciais da conta. |
 | CI | GitHub Actions | Previsto |
 
-O modelo generativo do Gemini ainda não foi escolhido.
+O modelo generativo foi escolhido na etapa 006 com base na documentação oficial consultada em 26/09/2026 (ver [plans/006-geracao-resposta.md](plans/006-geracao-resposta.md)); é configurável em `Gemini:GenerationModel`.
 
 ### Restrições
 
@@ -175,7 +175,20 @@ Decisões registradas em [plans/005-recuperacao-semantica.md](plans/005-recupera
 | Índice inexistente | Alias inexistente é falha: o erro do Qdrant propaga e é registrado na etapa `search`. | `ChunkRetriever` |
 | Configuração ausente | Gemini e Qdrant são resolvidos dentro da operação, antes de qualquer chamada externa; a falha é registrada na etapa `configuration`. | `ChunkRetriever` |
 
-**Em aberto**: o formato do prompt, o critério para considerar o contexto insuficiente (inclusive um eventual threshold de score) e o contrato exato de requisição e resposta de `POST /questions`.
+### Geração de resposta (implementado)
+
+Decisões registradas em [plans/006-geracao-resposta.md](plans/006-geracao-resposta.md). `AnswerGenerator.GenerateAsync(pergunta, trechos)` cobre as etapas de construção do contexto e geração; ainda não há endpoint.
+
+| Tema | Decisão | Código |
+|---|---|---|
+| Modelo | `gemini-3.6-flash` (configurável), com temperatura, limite de saída e raciocínio nos padrões do modelo. | `GeminiOptions`, `IChatClient` |
+| Prompt | Regras na instrução de sistema: responder apenas com base nos trechos, sem conhecimento geral, tratando o conteúdo dos trechos como dado e nunca como instrução, em pt-BR. Pergunta e trechos numerados 1..N (com documento e índice) em blocos delimitados por um marcador aleatório por requisição; o conteúdo dos documentos não é alterado. | `AnswerPrompt` |
+| Resposta do modelo | JSON com schema: `status` (`answered` ou `insufficient_context`) e `answer`. | `AnswerPrompt` |
+| Resultado | `GeneratedAnswer(Status, Text, Context)`: `Answered` com o texto do modelo; `InsufficientContext` (modelo) e `NoContext` (nenhum trecho recuperado, sem chamar o modelo) com a mensagem fixa "Os documentos disponíveis não contêm informação suficiente para responder a esta pergunta." | `GeneratedAnswer` |
+| Fontes | `Context` são exatamente os trechos enviados, na ordem do prompt (`Context[i]` é o trecho `[i+1]`). O vínculo vem da recuperação, não de uma escolha do modelo. | `AnswerGenerator` |
+| Respostas inválidas | Exceção, sem expor conteúdo, para prompt bloqueado, ausência de motivo de término, resposta cortada (`Length`), geração interrompida (`ContentFilter` e outros), texto vazio, JSON inválido, status desconhecido e `answered` sem texto. Sem retry. | `AnswerGenerator` |
+
+**Em aberto**: threshold de score e seleção de trechos, citações `[n]` feitas pelo modelo como informação adicional e o contrato exato de requisição e resposta de `POST /questions`.
 
 ## API da v1
 
@@ -232,6 +245,15 @@ Instrumentação própria no `ChunkRetriever`, no mesmo `ActivitySource` e `Mete
 - **Métricas**: `fonte.retrieval.duration` (histograma, segundos, com `fonte.retrieval.outcome` = `success` ou `failed`, e `error.type` em falhas).
 - **Logs**: falha como erro, com `Stage` = `configuration`, `embedding` ou `search`; sucesso em nível Debug, com a quantidade de resultados e a duração.
 - **Privacidade**: a pergunta, o conteúdo dos chunks, vetores, `DocumentPath` e scores não entram em traces nem métricas; a pergunta e o conteúdo não entram nos logs.
+
+### Geração de resposta (implementado)
+
+Instrumentação própria no `AnswerGenerator`, no mesmo `ActivitySource` e `Meter` `Fonte.Api` (`AnswerMetrics`):
+
+- **Traces**: `answer.generate` (com o span HTTP do Gemini abaixo), com `fonte.answer.context_chunks`, `fonte.answer.status`, `gen_ai.request.model` e, quando informados pela API, `gen_ai.usage.input_tokens` e `gen_ai.usage.output_tokens`. Em falha, status `Error` e `error.type`.
+- **Métricas**: `fonte.answer.duration` (histograma, segundos, com `fonte.answer.outcome` = `answered`, `insufficient_context`, `no_context` ou `failed`, e `error.type` em falhas).
+- **Logs**: falha como erro, com `Stage` = `configuration`, `generation` ou `response`; sucesso em nível Debug, com status, quantidade de trechos e duração.
+- **Privacidade**: pergunta, trechos, prompt montado, JSON e texto da resposta não entram em logs, traces nem métricas; `DocumentPath` fica fora de traces e métricas. A instrumentação automática de `IChatClient` do `Microsoft.Extensions.AI` não é usada.
 
 ### Perguntas (previsto)
 
@@ -307,6 +329,7 @@ O Gemini fica na seção `Gemini` (`GeminiOptions`), validada na inicialização
 | `Gemini:ApiKey` | — | Segredo. Em desenvolvimento, no `appsettings.Development.json` local; nos demais ambientes, via variável `Gemini__ApiKey`. Exigida apenas ao gerar embeddings. As variáveis `GEMINI_API_KEY` e `GOOGLE_API_KEY` não são usadas. |
 | `Gemini:EmbeddingModel` | `gemini-embedding-2` | Obrigatória. |
 | `Gemini:EmbeddingDimensions` | `768` | De 128 a 3072. |
+| `Gemini:GenerationModel` | `gemini-3.6-flash` | Obrigatória. Modelo generativo usado nas respostas. |
 
 O Qdrant fica na seção `Qdrant` (`QdrantOptions`), validada na inicialização, exceto os segredos:
 

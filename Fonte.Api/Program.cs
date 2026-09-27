@@ -1,3 +1,4 @@
+using Fonte.Api.Answering;
 using Fonte.Api.Embeddings;
 using Fonte.Api.Indexing;
 using Fonte.Api.Observability;
@@ -84,6 +85,15 @@ builder.Services.AddSingleton<QueryEmbedder>();
 builder.Services.AddSingleton<Func<QueryEmbedder>>(services => services.GetRequiredService<QueryEmbedder>);
 builder.Services.AddSingleton<RetrievalMetrics>();
 builder.Services.AddSingleton<ChunkRetriever>();
+
+builder.Services.AddSingleton(services =>
+{
+    var options = services.GetRequiredService<IOptions<GeminiOptions>>().Value;
+    return services.GetRequiredService<Client>().AsIChatClient(options.GenerationModel);
+});
+builder.Services.AddSingleton<Func<IChatClient>>(services => services.GetRequiredService<IChatClient>);
+builder.Services.AddSingleton<AnswerMetrics>();
+builder.Services.AddSingleton<AnswerGenerator>();
 
 var app = builder.Build();
 
