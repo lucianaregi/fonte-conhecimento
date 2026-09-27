@@ -66,3 +66,6 @@ nunit-*.xml
 
 # Configuração local com segredos (usar appsettings.Development.example.json como modelo)
 appsettings.Development.json
+
+# Coleção local do Postman
+Fonte.postman_collection.json
