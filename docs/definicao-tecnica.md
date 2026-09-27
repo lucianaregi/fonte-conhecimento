@@ -2,7 +2,7 @@
 
 Este documento é a referência atual do escopo do Fonte. Descreve o que a v1 deve entregar e separa o que já está implementado do que ainda está previsto.
 
-> **Estado atual do código**: o repositório contém a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)), o núcleo local da indexação (leitura e chunking de Markdown, em [Fonte.Api/Indexing/](../Fonte.Api/Indexing/)), a geração de embeddings dos chunks com Gemini (em [Fonte.Api/Embeddings/](../Fonte.Api/Embeddings/)), o armazenamento dos chunks vetorizados no Qdrant (em [Fonte.Api/VectorStore/](../Fonte.Api/VectorStore/)), o fluxo completo de indexação com `POST /documents/index`, a recuperação semântica de chunks para perguntas (em [Fonte.Api/Retrieval/](../Fonte.Api/Retrieval/)), a geração de resposta fundamentada no contexto recuperado (em [Fonte.Api/Answering/](../Fonte.Api/Answering/)), o endpoint `POST /questions`, que junta recuperação e geração, e a fundação de observabilidade (em [Fonte.Api/Observability/](../Fonte.Api/Observability/)), com testes. A conexão efetiva com o Grafana Cloud e CI ainda **não estão implementados**.
+> **Estado atual do código**: o repositório contém a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)), o núcleo local da indexação (leitura e chunking de Markdown, em [Fonte.Api/Indexing/](../Fonte.Api/Indexing/)), a geração de embeddings dos chunks com Gemini (em [Fonte.Api/Embeddings/](../Fonte.Api/Embeddings/)), o armazenamento dos chunks vetorizados no Qdrant (em [Fonte.Api/VectorStore/](../Fonte.Api/VectorStore/)), o fluxo completo de indexação com `POST /documents/index`, a recuperação semântica de chunks para perguntas (em [Fonte.Api/Retrieval/](../Fonte.Api/Retrieval/)), a geração de resposta fundamentada no contexto recuperado (em [Fonte.Api/Answering/](../Fonte.Api/Answering/)), o endpoint `POST /questions`, que junta recuperação e geração, a especificação OpenAPI com Swagger UI em `Development` (em [Fonte.Api/OpenApi/](../Fonte.Api/OpenApi/)) e a observabilidade (em [Fonte.Api/Observability/](../Fonte.Api/Observability/)), com exportação OTLP para o Grafana Cloud validada com traces, métricas e logs reais ([plans/008-observabilidade-grafana.md](plans/008-observabilidade-grafana.md)), com testes. A CI ainda **não está implementada**.
 
 ## Contexto
 
@@ -126,8 +126,7 @@ Decisões registradas em [plans/002-embeddings-gemini.md](plans/002-embeddings-g
 **Em aberto**:
 
 - tamanho do lote por requisição (a documentação da Gemini API não informa o máximo);
-- política de retry para erros 429 e 5xx;
-- formato e fluxo do embedding da pergunta.
+- política de retry para erros 429 e 5xx.
 
 ### Armazenamento no Qdrant (implementado)
 
@@ -201,6 +200,14 @@ A v1 tem três endpoints.
 | `GET /health` | Health check | Implementado: retorna `200 OK` sem corpo |
 | `POST /documents/index` | Indexa ou reindexa os documentos da pasta configurada | Implementado (ver abaixo) |
 | `POST /questions` | Recebe uma pergunta e retorna resposta + fontes | Implementado (ver abaixo) |
+
+### OpenAPI e Swagger (implementado)
+
+Decisões registradas em [plans/009-openapi-swagger.md](plans/009-openapi-swagger.md). A especificação é gerada pelo `Microsoft.AspNetCore.OpenApi` (OpenAPI 3.1) e a interface usa os assets do `Swashbuckle.AspNetCore.SwaggerUI` (`OpenApiRegistration`).
+
+- **Apenas em `Development`**: especificação em `/openapi/v1.json` e Swagger UI em `/swagger`. Nos demais ambientes (inclusive `Testing`), as rotas não existem e respondem `404` com `ProblemDetails`.
+- **Conteúdo**: os três endpoints com resumo, descrição, corpo de requisição, respostas e schemas. Os erros aparecem como `application/problem+json` (`ProblemDetails`; `HttpValidationProblemDetails` no `400` de `POST /questions`), com `traceId` acrescentado aos schemas por um transformador.
+- **Contratos inalterados**: só metadados foram adicionados aos endpoints. Em `QuestionRequest`, `[Required]` e `[MaxLength(2000)]` apenas descrevem o schema; sem `AddValidation`, a validação continua a do endpoint.
 
 ### `POST /documents/index`
 
@@ -339,15 +346,17 @@ Instrumentação própria com `ActivitySource`. Deve permitir observar, entre ou
 
 ### Métricas
 
-Instrumentação própria com `Meter`. Exemplos iniciais:
+Instrumentação própria com `Meter` `Fonte.Api` (`IndexingMetrics`, `RetrievalMetrics`, `AnswerMetrics`):
 
-- documentos indexados;
-- chunks indexados;
-- perguntas processadas;
-- falhas nas integrações externas;
-- duração das operações relevantes.
+| Métrica | Tipo | Unidade | Atributos |
+|---|---|---|---|
+| `fonte.indexing.duration` | Histograma | `s` | `fonte.indexing.outcome`; `error.type` em falhas |
+| `fonte.indexing.documents` | Contador | `{document}` | — (só indexações publicadas) |
+| `fonte.indexing.chunks` | Contador | `{chunk}` | — (só indexações publicadas) |
+| `fonte.retrieval.duration` | Histograma | `s` | `fonte.retrieval.outcome`; `error.type` em falhas |
+| `fonte.answer.duration` | Histograma | `s` | `fonte.answer.outcome`; `error.type` em falhas |
 
-A lista não é exaustiva. Nomes, tipos de instrumento e atributos ainda não foram definidos.
+Os valores de cada `outcome` estão nas seções de indexação, recuperação e geração acima. Também são coletadas as métricas automáticas do ASP.NET Core e de `System.Net.Http`.
 
 ### Logs
 

@@ -1,8 +1,13 @@
+using System.ComponentModel;
+
 namespace Fonte.Api.Indexing;
 
 public static class DocumentIndexingEndpoint
 {
-    public sealed record IndexDocumentsResponse(int Documents, int Chunks, bool CleanupCompleted);
+    public sealed record IndexDocumentsResponse(
+        [property: Description("Quantidade de documentos Markdown indexados.")] int Documents,
+        [property: Description("Quantidade de chunks gravados no Qdrant.")] int Chunks,
+        [property: Description("Falso quando a limpeza das collections antigas falhou; as sobras são removidas na próxima indexação.")] bool CleanupCompleted);
 
     public static IEndpointRouteBuilder MapDocumentIndexing(this IEndpointRouteBuilder endpoints)
     {
@@ -24,7 +29,18 @@ public static class DocumentIndexingEndpoint
                     detail: "Nenhum documento Markdown foi encontrado na pasta configurada. O índice ativo não foi alterado."),
                 _ => throw new InvalidOperationException($"Status de indexação desconhecido: {outcome.Status}."),
             };
-        });
+        })
+            .WithName("IndexDocuments")
+            .WithTags("Documentos")
+            .WithSummary("Indexa ou reindexa os documentos Markdown da pasta configurada")
+            .WithDescription(
+                "Lê os documentos, divide em chunks, gera os embeddings no Gemini e publica uma nova collection no Qdrant " +
+                "(reindexação blue/green). Sem corpo na requisição. Uma indexação por vez em cada instância. " +
+                "Em qualquer falha antes da publicação, o índice ativo não muda.")
+            .Produces<IndexDocumentsResponse>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
+            .ProducesProblem(StatusCodes.Status500InternalServerError);
 
         return endpoints;
     }

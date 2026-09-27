@@ -3,6 +3,7 @@ using Fonte.Api.Embeddings;
 using Fonte.Api.ErrorHandling;
 using Fonte.Api.Indexing;
 using Fonte.Api.Observability;
+using Fonte.Api.OpenApi;
 using Fonte.Api.Retrieval;
 using Fonte.Api.VectorStore;
 using Google.GenAI;
@@ -14,6 +15,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddFonteOpenTelemetry();
 builder.Services.AddFonteProblemDetails();
+builder.Services.AddFonteOpenApi();
 
 builder.Services.AddOptions<DocumentsOptions>()
     .Bind(builder.Configuration.GetSection(DocumentsOptions.SectionName))
@@ -100,8 +102,14 @@ builder.Services.AddSingleton<AnswerGenerator>();
 var app = builder.Build();
 
 app.UseFonteErrorResponses();
+app.MapFonteOpenApi();
 
-app.MapGet("/health", () => Results.Ok());
+app.MapGet("/health", () => Results.Ok())
+    .WithName("GetHealth")
+    .WithTags("Health")
+    .WithSummary("Verifica se a API está no ar")
+    .WithDescription("Retorna 200 sem corpo. Não depende do Gemini nem do Qdrant e não gera trace.")
+    .Produces(StatusCodes.Status200OK);
 app.MapDocumentIndexing();
 app.MapQuestions();
 

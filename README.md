@@ -66,6 +66,13 @@ dotnet run --project Fonte.Api
 
 A API sobe em `http://localhost:5023` (perfil `http` em [launchSettings.json](Fonte.Api/Properties/launchSettings.json)), no ambiente `Development`.
 
+Em `Development`, a especificação OpenAPI e a interface Swagger ficam disponíveis para consultar e testar os endpoints:
+
+- Especificação OpenAPI 3.1: `http://localhost:5023/openapi/v1.json`
+- Swagger UI: `http://localhost:5023/swagger`
+
+Fora de `Development`, essas rotas não existem e respondem `404`.
+
 Para indexar os documentos de `Fonte.Api/documents/`:
 
 ```bash
@@ -151,6 +158,7 @@ Os testes de integração sobem a aplicação no ambiente `Testing`, que não ca
   - `Answering/`: geração da resposta e `POST /questions`.
   - `Observability/`: OpenTelemetry, traces e métricas.
   - `ErrorHandling/`: contrato de erros (`ProblemDetails`).
+  - `OpenApi/`: especificação OpenAPI e Swagger UI (apenas em `Development`).
   - `documents/`: corpus Markdown de demonstração.
 - `Fonte.Tests/`: testes automatizados (xUnit).
 - `docs/`: documentação técnica.

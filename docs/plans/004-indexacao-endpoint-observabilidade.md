@@ -1,6 +1,6 @@
 # Plano 004: fluxo de indexação, `POST /documents/index` e observabilidade
 
-**Status**: implementado, aguardando revisão.
+**Status**: implementado e aprovado.
 
 **Atualização**: em desenvolvimento, os segredos passaram a vir de `appsettings.Development.json` local e não versionado, no lugar de user-secrets (ver [definição técnica](../definicao-tecnica.md)).
 
