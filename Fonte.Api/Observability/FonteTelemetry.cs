@@ -18,6 +18,7 @@ public static class FonteTelemetry
         public const string DocumentsChunk = "documents.chunk";
         public const string EmbeddingCreate = "embedding.create";
         public const string VectorStoreReplace = "vectorstore.replace";
+        public const string RetrievalSearch = "retrieval.search";
     }
 
     public static class Attributes
@@ -26,6 +27,9 @@ public static class FonteTelemetry
         public const string ChunksCount = "fonte.chunks.count";
         public const string CleanupCompleted = "fonte.cleanup.completed";
         public const string IndexingOutcome = "fonte.indexing.outcome";
+        public const string RetrievalTopK = "fonte.retrieval.top_k";
+        public const string RetrievalResults = "fonte.retrieval.results";
+        public const string RetrievalOutcome = "fonte.retrieval.outcome";
         public const string ErrorType = "error.type";
     }
 }

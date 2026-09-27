@@ -1,3 +1,4 @@
+using Fonte.Api.Retrieval;
 using Fonte.Api.VectorStore;
 
 namespace Fonte.Tests.Fakes;
@@ -16,6 +17,14 @@ public sealed class FakeQdrantGateway : IQdrantGateway
     public (string Collection, Exception Error)? FailDeleteOf { get; init; }
 
     public List<string> Operations { get; } = [];
+
+    /// <summary>Resultados devolvidos por <see cref="SearchAsync"/>.</summary>
+    public List<RetrievedChunk> SearchResults { get; } = [];
+
+    /// <summary>Quando definido, <see cref="SearchAsync"/> falha com esta exceção (ex.: alias inexistente).</summary>
+    public Exception? SearchFailure { get; init; }
+
+    public ReadOnlyMemory<float>? LastSearchVector { get; private set; }
 
     public List<IReadOnlyList<ChunkPoint>> Upserted { get; } = [];
 
@@ -86,6 +95,20 @@ public sealed class FakeQdrantGateway : IQdrantGateway
 
         Collections.Remove(name);
         return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<RetrievedChunk>> SearchAsync(
+        string collection,
+        ReadOnlyMemory<float> vector,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        Record($"search {collection} {limit}", cancellationToken);
+        LastSearchVector = vector;
+
+        return SearchFailure is not null
+            ? Task.FromException<IReadOnlyList<RetrievedChunk>>(SearchFailure)
+            : Task.FromResult<IReadOnlyList<RetrievedChunk>>([.. SearchResults.Take(limit)]);
     }
 
     private void Record(string operation, CancellationToken cancellationToken)

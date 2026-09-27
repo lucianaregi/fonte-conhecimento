@@ -2,7 +2,7 @@
 
 Este documento é a referência atual do escopo do Fonte. Descreve o que a v1 deve entregar e separa o que já está implementado do que ainda está previsto.
 
-> **Estado atual do código**: o repositório contém a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)), o núcleo local da indexação (leitura e chunking de Markdown, em [Fonte.Api/Indexing/](../Fonte.Api/Indexing/)), a geração de embeddings dos chunks com Gemini (em [Fonte.Api/Embeddings/](../Fonte.Api/Embeddings/)), o armazenamento dos chunks vetorizados no Qdrant (em [Fonte.Api/VectorStore/](../Fonte.Api/VectorStore/)), o fluxo completo de indexação com `POST /documents/index` e a fundação de observabilidade (em [Fonte.Api/Observability/](../Fonte.Api/Observability/)), com testes. Busca vetorial, `POST /questions`, conexão efetiva com o Grafana Cloud e CI ainda **não estão implementados**.
+> **Estado atual do código**: o repositório contém a API com `GET /health` ([Fonte.Api/Program.cs](../Fonte.Api/Program.cs)), o núcleo local da indexação (leitura e chunking de Markdown, em [Fonte.Api/Indexing/](../Fonte.Api/Indexing/)), a geração de embeddings dos chunks com Gemini (em [Fonte.Api/Embeddings/](../Fonte.Api/Embeddings/)), o armazenamento dos chunks vetorizados no Qdrant (em [Fonte.Api/VectorStore/](../Fonte.Api/VectorStore/)), o fluxo completo de indexação com `POST /documents/index`, a recuperação semântica de chunks para perguntas (em [Fonte.Api/Retrieval/](../Fonte.Api/Retrieval/)) e a fundação de observabilidade (em [Fonte.Api/Observability/](../Fonte.Api/Observability/)), com testes. `POST /questions`, geração de respostas, conexão efetiva com o Grafana Cloud e CI ainda **não estão implementados**.
 
 ## Contexto
 
@@ -73,7 +73,7 @@ Se os documentos não fornecerem contexto suficiente, o sistema deve informar is
 | Testes | Testes automatizados | Implementado: xUnit + `Microsoft.AspNetCore.Mvc.Testing` ([Fonte.Tests.csproj](../Fonte.Tests/Fonte.Tests.csproj)) |
 | Embeddings | Modelo de embeddings do Gemini (Gemini API) | Implementado: `gemini-embedding-2` via SDK `Google.GenAI`, exposto como `IEmbeddingGenerator` (`Microsoft.Extensions.AI`). Ainda não usado por nenhum endpoint. |
 | Geração | Modelo generativo do Gemini (Gemini API) | Previsto |
-| Busca vetorial | Qdrant Cloud | Armazenamento implementado com o SDK `Qdrant.Client` (`ChunkVectorStore`), ainda não usado por nenhum endpoint. Busca prevista. |
+| Busca vetorial | Qdrant Cloud | Armazenamento e busca implementados com o SDK `Qdrant.Client` (`ChunkVectorStore`). A busca ainda não é usada por nenhum endpoint. |
 | Observabilidade | OpenTelemetry, `ActivitySource`, `Meter`, `ILogger`, Grafana Cloud | Implementado para a indexação: traces, métricas e logs com OpenTelemetry e exportação OTLP opcional. A conexão com o Grafana Cloud depende das credenciais da conta. |
 | CI | GitHub Actions | Previsto |
 
@@ -144,8 +144,7 @@ Decisões registradas em [plans/003-armazenamento-qdrant.md](plans/003-armazenam
 **Em aberto**:
 
 - limite de pontos ou bytes por upsert, se for preciso agrupar mais de um documento;
-- controle de concorrência entre instâncias (dentro de uma instância, resolvido pelo `DocumentIndexer`);
-- busca vetorial pelo alias.
+- controle de concorrência entre instâncias (dentro de uma instância, resolvido pelo `DocumentIndexer`).
 
 ## Fluxo de pergunta
 
@@ -163,7 +162,20 @@ POST /questions
 
 N é configurável; o valor inicial é **3**.
 
-**Em aberto**: o formato do prompt, o critério para considerar o contexto insuficiente e o contrato exato de requisição e resposta.
+### Recuperação (implementado)
+
+Decisões registradas em [plans/005-recuperacao-semantica.md](plans/005-recuperacao-semantica.md). `ChunkRetriever.RetrieveAsync(pergunta)` cobre as três primeiras etapas do fluxo; ainda não há endpoint nem geração de resposta.
+
+| Tema | Decisão | Código |
+|---|---|---|
+| Embedding da pergunta | Mesmo modelo e dimensões dos chunks. Texto enviado: `task: search result \| query: {pergunta}`, formato documentado para consultas no `gemini-embedding-2`. Pergunta vazia gera `ArgumentException`. | `QueryEmbedder` |
+| Busca | Query API do Qdrant, pelo alias configurado, com `limit = Retrieval:TopK` e payload na resposta; resultados ordenados por score (Cosine: maior é mais similar). | `ChunkVectorStore`, `QdrantGateway` |
+| Resultado | `RetrievedChunk(DocumentPath, ChunkIndex, Content, Score)`. | `RetrievedChunk` |
+| Sem resultados | Índice existente sem resultados retorna lista vazia. Sem threshold de score. | `ChunkRetriever` |
+| Índice inexistente | Alias inexistente é falha: o erro do Qdrant propaga e é registrado na etapa `search`. | `ChunkRetriever` |
+| Configuração ausente | Gemini e Qdrant são resolvidos dentro da operação, antes de qualquer chamada externa; a falha é registrada na etapa `configuration`. | `ChunkRetriever` |
+
+**Em aberto**: o formato do prompt, o critério para considerar o contexto insuficiente (inclusive um eventual threshold de score) e o contrato exato de requisição e resposta de `POST /questions`.
 
 ## API da v1
 
@@ -211,6 +223,15 @@ POST /documents/index           ← ASP.NET Core (automático)
 - **Métricas**: `fonte.indexing.duration` (histograma, segundos, com `fonte.indexing.outcome` = `published`, `published_cleanup_failed`, `failed`, `already_running` ou `no_documents`, e `error.type` em falhas); `fonte.indexing.documents` e `fonte.indexing.chunks` (contadores das indexações publicadas). Também são coletadas as métricas automáticas do ASP.NET Core e de `System.Net.Http`.
 - **Logs**: estruturados com `ILogger` (`LoggerMessage`): início, conclusão (documentos, chunks, duração), rejeições, falha de limpeza (aviso) e falha (erro, com `Stage` = `configuration`, `read`, `chunk`, `embedding` ou `vectorstore`).
 - **Privacidade**: conteúdo de documentos e chunks, embeddings e chaves nunca entram na telemetria. `DocumentPath` fica fora de traces e métricas; pode aparecer em logs de erro, pela mensagem da exceção, para identificar o documento que falhou.
+
+### Recuperação (implementado)
+
+Instrumentação própria no `ChunkRetriever`, no mesmo `ActivitySource` e `Meter` `Fonte.Api` (`RetrievalMetrics`):
+
+- **Traces**: `embedding.create` (com o span HTTP do Gemini abaixo) e `retrieval.search` (tags `fonte.retrieval.top_k` e `fonte.retrieval.results`). Em falha, status `Error` e `error.type`.
+- **Métricas**: `fonte.retrieval.duration` (histograma, segundos, com `fonte.retrieval.outcome` = `success` ou `failed`, e `error.type` em falhas).
+- **Logs**: falha como erro, com `Stage` = `configuration`, `embedding` ou `search`; sucesso em nível Debug, com a quantidade de resultados e a duração.
+- **Privacidade**: a pergunta, o conteúdo dos chunks, vetores, `DocumentPath` e scores não entram em traces nem métricas; a pergunta e o conteúdo não entram nos logs.
 
 ### Perguntas (previsto)
 
@@ -294,6 +315,12 @@ O Qdrant fica na seção `Qdrant` (`QdrantOptions`), validada na inicialização
 | `Qdrant:CollectionName` | `fonte-chunks` | Obrigatória. Nome do alias da collection ativa. |
 | `Qdrant:Url` | — | Segredo. Endereço gRPC do cluster (porta 6334), no `appsettings.Development.json` local em desenvolvimento ou via `Qdrant__Url` nos demais ambientes. Exigido apenas ao usar o Qdrant. |
 | `Qdrant:ApiKey` | — | Segredo, no `appsettings.Development.json` local em desenvolvimento ou via `Qdrant__ApiKey` nos demais ambientes. Exigida apenas ao usar o Qdrant. |
+
+A recuperação fica na seção `Retrieval` (`RetrievalOptions`), validada na inicialização:
+
+| Chave | Padrão | Regra |
+|---|---|---|
+| `Retrieval:TopK` | `3` | Maior ou igual a 1. Quantidade máxima de chunks retornados por pergunta. |
 
 A telemetria é exportada por OTLP somente quando `OTEL_EXPORTER_OTLP_ENDPOINT` está configurado; sem ele, nada é enviado. As variáveis seguem o padrão do OpenTelemetry e nenhuma entra no repositório:
 

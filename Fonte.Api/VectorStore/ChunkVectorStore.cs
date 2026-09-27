@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Fonte.Api.Embeddings;
+using Fonte.Api.Retrieval;
 using Microsoft.Extensions.Options;
 
 namespace Fonte.Api.VectorStore;
@@ -43,6 +44,13 @@ public sealed class ChunkVectorStore(
 
         await DeleteOldCollectionsAsync(collection, cancellationToken);
     }
+
+    /// <summary>Busca, na indexação ativa (pelo alias), os chunks mais similares a <paramref name="vector"/>.</summary>
+    public Task<IReadOnlyList<RetrievedChunk>> SearchAsync(
+        ReadOnlyMemory<float> vector,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        gateway.SearchAsync(_alias, vector, limit, cancellationToken);
 
     private async Task DeleteOldCollectionsAsync(string activeCollection, CancellationToken cancellationToken)
     {

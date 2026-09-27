@@ -1,6 +1,7 @@
 using Fonte.Api.Embeddings;
 using Fonte.Api.Indexing;
 using Fonte.Api.Observability;
+using Fonte.Api.Retrieval;
 using Fonte.Api.VectorStore;
 using Google.GenAI;
 using Microsoft.Extensions.AI;
@@ -74,6 +75,15 @@ builder.Services.AddSingleton<Func<ChunkEmbedder>>(services => services.GetRequi
 builder.Services.AddSingleton<Func<ChunkVectorStore>>(services => services.GetRequiredService<ChunkVectorStore>);
 builder.Services.AddSingleton<IndexingMetrics>();
 builder.Services.AddSingleton<DocumentIndexer>();
+
+builder.Services.AddOptions<RetrievalOptions>()
+    .Bind(builder.Configuration.GetSection(RetrievalOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddSingleton<QueryEmbedder>();
+builder.Services.AddSingleton<Func<QueryEmbedder>>(services => services.GetRequiredService<QueryEmbedder>);
+builder.Services.AddSingleton<RetrievalMetrics>();
+builder.Services.AddSingleton<ChunkRetriever>();
 
 var app = builder.Build();
 

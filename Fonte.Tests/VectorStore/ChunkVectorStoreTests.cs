@@ -1,6 +1,7 @@
 using System.Globalization;
 using Fonte.Api.Embeddings;
 using Fonte.Api.Indexing;
+using Fonte.Api.Retrieval;
 using Fonte.Api.VectorStore;
 using Fonte.Tests.Fakes;
 using Microsoft.Extensions.Options;
@@ -214,6 +215,23 @@ public class ChunkVectorStoreTests
         Assert.Contains($"create {NewCollection} {Dimensions} Cosine", gateway.Operations);
         Assert.DoesNotContain(gateway.Operations, o => o.StartsWith("upsert"));
         Assert.Contains($"switch {Alias} {NewCollection} replace=False", gateway.Operations);
+    }
+
+    [Fact]
+    public async Task SearchQueriesActiveIndexThroughAliasWithRequestedLimit()
+    {
+        var gateway = new FakeQdrantGateway();
+        var stored = new RetrievedChunk("rag.md", 2, "A recuperação encontra trechos.", 0.8f);
+        gateway.SearchResults.Add(stored);
+        float[] vector = [0.1f, 0.2f];
+        using var cancellation = new CancellationTokenSource();
+
+        var results = await CreateStore(gateway).SearchAsync(vector, limit: 3, cancellation.Token);
+
+        Assert.Equal([$"search {Alias} 3"], gateway.Operations);
+        Assert.Equal(vector, gateway.LastSearchVector!.Value.ToArray());
+        Assert.Equal(cancellation.Token, Assert.Single(gateway.Tokens));
+        Assert.Equal([stored], results);
     }
 
     [Fact]

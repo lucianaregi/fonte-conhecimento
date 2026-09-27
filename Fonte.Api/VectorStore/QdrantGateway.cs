@@ -1,3 +1,4 @@
+using Fonte.Api.Retrieval;
 using Qdrant.Client;
 using Qdrant.Client.Grpc;
 
@@ -43,6 +44,35 @@ public sealed class QdrantGateway(QdrantClient client) : IQdrantGateway
 
     public Task DeleteCollectionAsync(string name, CancellationToken cancellationToken) =>
         client.DeleteCollectionAsync(name, cancellationToken: cancellationToken);
+
+    public async Task<IReadOnlyList<RetrievedChunk>> SearchAsync(
+        string collection,
+        ReadOnlyMemory<float> vector,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        // Query API (o SearchAsync do SDK está obsoleto). O payload só vem quando pedido; vetores não são necessários.
+        var points = await client.QueryAsync(
+            collection,
+            query: vector.ToArray(),
+            limit: (ulong)limit,
+            payloadSelector: true,
+            cancellationToken: cancellationToken);
+
+        return points.Select(ToRetrievedChunk).ToList();
+    }
+
+    public static RetrievedChunk ToRetrievedChunk(ScoredPoint point) =>
+        new(
+            RequiredPayload(point, ChunkPoint.DocumentPathField, Value.KindOneofCase.StringValue).StringValue,
+            (int)RequiredPayload(point, ChunkPoint.ChunkIndexField, Value.KindOneofCase.IntegerValue).IntegerValue,
+            RequiredPayload(point, ChunkPoint.ContentField, Value.KindOneofCase.StringValue).StringValue,
+            point.Score);
+
+    private static Value RequiredPayload(ScoredPoint point, string field, Value.KindOneofCase kind) =>
+        point.Payload.TryGetValue(field, out var value) && value.KindCase == kind
+            ? value
+            : throw new InvalidOperationException($"O ponto {point.Id} não tem o campo '{field}' esperado no payload.");
 
     public static PointStruct ToPointStruct(ChunkPoint point) =>
         new()

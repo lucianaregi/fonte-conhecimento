@@ -1,3 +1,4 @@
+using Fonte.Api.Retrieval;
 using Fonte.Api.VectorStore;
 using Qdrant.Client.Grpc;
 
@@ -19,6 +20,46 @@ public class QdrantGatewayMappingTests
         Assert.Equal("guias/dotnet.md", mapped.Payload["document_path"].StringValue);
         Assert.Equal(2, mapped.Payload["chunk_index"].IntegerValue);
         Assert.Equal("ActivitySource cria spans.", mapped.Payload["content"].StringValue);
+    }
+
+    [Fact]
+    public void ToRetrievedChunkMapsPayloadAndScore()
+    {
+        var point = new ScoredPoint
+        {
+            Score = 0.87f,
+            Payload =
+            {
+                ["document_path"] = "guias/observabilidade.md",
+                ["chunk_index"] = 4L,
+                ["content"] = "ActivitySource cria spans.",
+            },
+        };
+
+        var chunk = QdrantGateway.ToRetrievedChunk(point);
+
+        Assert.Equal(new RetrievedChunk("guias/observabilidade.md", 4, "ActivitySource cria spans.", 0.87f), chunk);
+    }
+
+    [Theory]
+    [InlineData("document_path")]
+    [InlineData("chunk_index")]
+    [InlineData("content")]
+    public void ToRetrievedChunkThrowsWhenPayloadFieldIsMissing(string missingField)
+    {
+        var point = new ScoredPoint
+        {
+            Score = 0.5f,
+            Payload =
+            {
+                ["document_path"] = "a.md",
+                ["chunk_index"] = 0L,
+                ["content"] = "texto",
+            },
+        };
+        point.Payload.Remove(missingField);
+
+        Assert.Throws<InvalidOperationException>(() => QdrantGateway.ToRetrievedChunk(point));
     }
 
     [Fact]

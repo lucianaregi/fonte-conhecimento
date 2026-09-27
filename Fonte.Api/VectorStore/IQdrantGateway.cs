@@ -1,3 +1,5 @@
+using Fonte.Api.Retrieval;
+
 namespace Fonte.Api.VectorStore;
 
 /// <summary>
@@ -19,4 +21,11 @@ public interface IQdrantGateway
     Task SwitchAliasAsync(string alias, string newCollection, bool replaceExisting, CancellationToken cancellationToken);
 
     Task DeleteCollectionAsync(string name, CancellationToken cancellationToken);
+
+    /// <summary>Os <paramref name="limit"/> pontos mais similares a <paramref name="vector"/>, ordenados por score.</summary>
+    Task<IReadOnlyList<RetrievedChunk>> SearchAsync(
+        string collection,
+        ReadOnlyMemory<float> vector,
+        int limit,
+        CancellationToken cancellationToken);
 }
